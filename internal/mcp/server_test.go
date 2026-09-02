@@ -69,17 +69,11 @@ func TestToolNameStrip(t *testing.T) {
 	}{
 		{"diff_mem_create", "create"},
 		{"diff_mem_append", "append"},
-		{"diff_mem_update_field", "update_field"},
-		{"diff_mem_update_summary", "update_summary"},
-		{"diff_mem_delete", "delete"},
-		{"diff_mem_archive", "archive"},
-		{"diff_mem_restore", "restore"},
-		{"diff_mem_link", "link"},
-		{"diff_mem_unlink", "unlink"},
+		{"diff_mem_update", "update"},
+		{"diff_mem_lifecycle", "lifecycle"},
 		{"diff_mem_list", "list"},
 		{"diff_mem_search", "search"},
 		{"diff_mem_show", "show"},
-		{"diff_mem_deep_load", "deep_load"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.toolName, func(t *testing.T) {
@@ -164,7 +158,7 @@ func TestHandler_ArchiveSuccess(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/arch", "title": "A", "summary": "A", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "archive", map[string]interface{}{
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
 		"path":   "/arch",
 		"reason": "测试归档",
 	})
@@ -177,26 +171,24 @@ func TestHandler_ArchiveSuccess(t *testing.T) {
 	}
 }
 
-func TestHandler_ArchiveImpactedNodes(t *testing.T) {
+func TestHandler_ArchiveLinkWarning(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
 	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
-	simulateHandler(e, "link", map[string]interface{}{
-		"from": "/a", "to": "/b", "type": "depends_on", "reason": "test",
+	simulateHandler(e, "append", map[string]interface{}{
+		"path": "/a", "event": "依赖 [[/b]]", "reason": "test",
 	})
 
-	// Archiving /b should report impacted nodes (since /a depends on /b)
-	result, _ := simulateHandler(e, "archive", map[string]interface{}{
-		"path": "/b", "reason": "测试归档依赖节点",
+	// Archiving /b should succeed but carry a warning (its body is linked by /a)
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
+		"path": "/b", "reason": "测试归档被链接节点",
 	})
 	if result.IsError {
-		t.Fatalf("archive should succeed even with dependents: %v", unmarshalResponse(result))
+		t.Fatalf("archive should succeed even when linked: %v", unmarshalResponse(result))
 	}
 	resp := unmarshalResponse(result)
-	if impacted, ok := resp["impacted"].([]interface{}); ok {
-		if len(impacted) == 0 {
-			t.Fatal("expected impacted nodes in response")
-		}
+	if warning, _ := resp["warning"].(string); warning == "" {
+		t.Fatal("expected warning in response")
 	}
 }
 
@@ -205,10 +197,10 @@ func TestHandler_RestoreArchived(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/rst", "title": "R", "summary": "R", "reason": "test",
 	})
-	simulateHandler(e, "archive", map[string]interface{}{
+	simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
 		"path": "/rst", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "restore", map[string]interface{}{
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "restore",
 		"path": "/rst", "reason": "测试恢复",
 	})
 	if result.IsError {
@@ -221,7 +213,7 @@ func TestHandler_RestoreNonArchived(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/rst2", "title": "R", "summary": "R", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "restore", map[string]interface{}{
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "restore",
 		"path": "/rst2", "reason": "test",
 	})
 	if !result.IsError {
@@ -262,16 +254,16 @@ func TestHandler_DeleteWithDependency(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
 	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
-	simulateHandler(e, "link", map[string]interface{}{
-		"from": "/a", "to": "/b", "type": "depends_on", "reason": "test",
+	simulateHandler(e, "append", map[string]interface{}{
+		"path": "/a", "event": "依赖 [[/b]] 的产出", "reason": "test",
 	})
 
-	// /b is depended upon by /a; deleting /b should fail
-	result, _ := simulateHandler(e, "delete", map[string]interface{}{
+	// /b is linked by /a's body; deleting /b should fail
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "delete",
 		"path": "/b", "reason": "test",
 	})
 	if !result.IsError {
-		t.Fatal("expected delete to fail when dependents exist")
+		t.Fatal("expected delete to fail when linked by other nodes")
 	}
 }
 
@@ -321,7 +313,7 @@ func TestHandler_DeepLoad(t *testing.T) {
 
 	windows := []string{"recent", "last_10", "last_50", "last_100", "all"}
 	for _, w := range windows {
-		result, _ := simulateHandler(e, "deep_load", map[string]interface{}{
+		result, _ := simulateHandler(e, "show", map[string]interface{}{
 			"path": "/tasks/t1", "window": w,
 		})
 		if result.IsError {
@@ -332,55 +324,11 @@ func TestHandler_DeepLoad(t *testing.T) {
 
 func TestHandler_DeepLoadInvalidWindow(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
-	result, _ := simulateHandler(e, "deep_load", map[string]interface{}{
+	result, _ := simulateHandler(e, "show", map[string]interface{}{
 		"path": "/x", "window": "invalid",
 	})
 	if !result.IsError {
 		t.Fatal("expected error for invalid window")
-	}
-}
-
-func TestHandler_LinkCycleDetection(t *testing.T) {
-	e := engine.New(store.NewMemoryStore())
-	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
-	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
-	simulateHandler(e, "create", map[string]interface{}{"path": "/c", "title": "C", "summary": "C", "reason": "test"})
-
-	simulateHandler(e, "link", map[string]interface{}{
-		"from": "/a", "to": "/b", "type": "depends_on", "reason": "test",
-	})
-	simulateHandler(e, "link", map[string]interface{}{
-		"from": "/b", "to": "/c", "type": "depends_on", "reason": "test",
-	})
-
-	// /c depends_on /a would create a cycle
-	result, _ := simulateHandler(e, "link", map[string]interface{}{
-		"from": "/c", "to": "/a", "type": "depends_on", "reason": "test",
-	})
-	if !result.IsError {
-		t.Fatal("expected cycle detection to reject link")
-	}
-	resp := unmarshalResponse(result)
-	if errInfo, ok := resp["error"].(map[string]interface{}); ok {
-		if code, _ := errInfo["code"].(string); code != "CYCLE_DETECTED" {
-			t.Fatalf("expected CYCLE_DETECTED, got %s", code)
-		}
-	}
-}
-
-func TestHandler_Unlink(t *testing.T) {
-	e := engine.New(store.NewMemoryStore())
-	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
-	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
-	simulateHandler(e, "link", map[string]interface{}{
-		"from": "/a", "to": "/b", "type": "references", "reason": "test",
-	})
-
-	result, _ := simulateHandler(e, "unlink", map[string]interface{}{
-		"from": "/a", "to": "/b",
-	})
-	if result.IsError {
-		t.Fatal("expected unlink success")
 	}
 }
 
@@ -390,11 +338,11 @@ func TestHandler_SummaryDriftLazyReason(t *testing.T) {
 		"path": "/drift", "title": "D", "summary": "张三负责后端，deadline 2026-09-30", "reason": "test",
 	})
 
-	result, _ := simulateHandler(e, "update_summary", map[string]interface{}{
-		"path":        "/drift",
-		"old_summary": "张三负责后端，deadline 2026-09-30",
-		"new_summary": "项目进行中",
-		"reason":      "ok",
+	result, _ := simulateHandler(e, "update", map[string]interface{}{
+		"path": "/drift",
+		"summary": map[string]interface{}{
+			"old": "张三负责后端，deadline 2026-09-30", "new": "项目进行中", "reason": "ok",
+		},
 	})
 	if !result.IsError {
 		t.Fatal("expected lazy reason to be rejected")
@@ -413,11 +361,12 @@ func TestHandler_SummaryDriftSubstantiveReason(t *testing.T) {
 		"path": "/drift2", "title": "D", "summary": "张三负责后端", "reason": "test",
 	})
 
-	result, _ := simulateHandler(e, "update_summary", map[string]interface{}{
-		"path":        "/drift2",
-		"old_summary": "张三负责后端",
-		"new_summary": "李四接替负责",
-		"reason":      "张三离职，李四接替负责后端开发工作",
+	result, _ := simulateHandler(e, "update", map[string]interface{}{
+		"path": "/drift2",
+		"summary": map[string]interface{}{
+			"old": "张三负责后端", "new": "李四接替负责",
+			"reason": "张三离职，李四接替负责后端开发工作",
+		},
 	})
 	if result.IsError {
 		t.Fatalf("expected substantive reason to pass: %v", unmarshalResponse(result))
@@ -427,9 +376,8 @@ func TestHandler_SummaryDriftSubstantiveReason(t *testing.T) {
 func TestAllToolsMapToEngine(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	expectedTools := []string{
-		"create", "append", "update_field", "update_summary",
-		"delete", "archive", "restore", "link", "unlink",
-		"list", "search", "show", "deep_load",
+		"create", "append", "update", "lifecycle",
+		"list", "search", "show",
 	}
 	for _, name := range expectedTools {
 		resp := e.Dispatch(name, map[string]interface{}{})
@@ -441,4 +389,3 @@ func TestAllToolsMapToEngine(t *testing.T) {
 
 // Ensure model types are used (suppress unused import warnings)
 var _ model.Node
-var _ model.Edge

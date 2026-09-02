@@ -22,17 +22,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	// POST /tools/{name} — main tool invocation endpoint
 	mux.HandleFunc("POST /tools/create", s.handle("create"))
 	mux.HandleFunc("POST /tools/append", s.handle("append"))
-	mux.HandleFunc("POST /tools/update_field", s.handle("update_field"))
-	mux.HandleFunc("POST /tools/update_summary", s.handle("update_summary"))
-	mux.HandleFunc("POST /tools/delete", s.handle("delete"))
-	mux.HandleFunc("POST /tools/archive", s.handle("archive"))
-	mux.HandleFunc("POST /tools/restore", s.handle("restore"))
-	mux.HandleFunc("POST /tools/link", s.handle("link"))
-	mux.HandleFunc("POST /tools/unlink", s.handle("unlink"))
+	mux.HandleFunc("POST /tools/update", s.handle("update"))
+	mux.HandleFunc("POST /tools/lifecycle", s.handle("lifecycle"))
 	mux.HandleFunc("POST /tools/list", s.handle("list"))
 	mux.HandleFunc("POST /tools/search", s.handle("search"))
 	mux.HandleFunc("POST /tools/show", s.handle("show"))
-	mux.HandleFunc("POST /tools/deep_load", s.handle("deep_load"))
 	mux.HandleFunc("POST /tools/exec", s.handleExec)
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

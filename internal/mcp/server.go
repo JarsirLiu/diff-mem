@@ -22,39 +22,19 @@ func (s *Server) Run(ctx context.Context, transport stdmcp.Transport) error {
 
 	s.addTool(server, &stdmcp.Tool{
 		Name:        "diff_mem_create",
-		Description: "在记忆树中创建新节点。path 由你决定，引擎自动创建缺失的父路径。",
+		Description: "在记忆树中创建新节点。path 由你决定，引擎自动创建缺失的父路径。Body 事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在。",
 	})
 	s.addTool(server, &stdmcp.Tool{
 		Name:        "diff_mem_append",
-		Description: "向节点追加事件。仅出现值得记录的新事实时调用。",
+		Description: "向节点追加事件。仅出现值得记录的新事实时调用。事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在，否则写入被拒绝。",
 	})
 	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_update_field",
-		Description: "更新节点 Header 中的字段值。",
+		Name:        "diff_mem_update",
+		Description: "更新节点 Header。fields 传 {字段: 值} 批量改字段；summary 传 {old, new, reason} 刷新摘要（实体消失需解释原因）。两者可同时提交。",
 	})
 	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_update_summary",
-		Description: "刷新节点摘要。提交 old_summary 做新旧对比，有实体消失时需解释原因。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_delete",
-		Description: "删除节点及其所有子节点。不可逆，有活跃依赖时拒绝。建议先 archive。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_archive",
-		Description: "归档节点。归档后冻结，从默认搜索中排除。可恢复。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_restore",
-		Description: "恢复已归档节点为活跃状态。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_link",
-		Description: "在两个节点间建立引用关系。type: depends_on/alternative_to/supersedes/references。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_unlink",
-		Description: "移除两个节点间的引用关系。",
+		Name:        "diff_mem_lifecycle",
+		Description: "节点生命周期状态转换。action: delete（删除，不可逆，有活跃依赖时拒绝）/ archive（归档，冻结并移出默认搜索，可恢复）/ restore（恢复归档节点）。",
 	})
 	s.addTool(server, &stdmcp.Tool{
 		Name:        "diff_mem_list",
@@ -66,11 +46,7 @@ func (s *Server) Run(ctx context.Context, transport stdmcp.Transport) error {
 	})
 	s.addTool(server, &stdmcp.Tool{
 		Name:        "diff_mem_show",
-		Description: "获取节点完整 Header 信息。",
-	})
-	s.addTool(server, &stdmcp.Tool{
-		Name:        "diff_mem_deep_load",
-		Description: "加载节点 Body 事件流。window: recent/last_10/last_50/last_100/all。",
+		Description: "查看节点。不传 window：返回 Header + 内容链接（links）与反向链接（backlinks），用于发现相关记忆。传 window（recent/last_10/last_50/last_100/all）：附带 Body 事件流，先看摘要再决定是否深入。",
 	})
 
 	return server.Run(ctx, transport)

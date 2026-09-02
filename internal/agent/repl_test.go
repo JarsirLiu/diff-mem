@@ -85,11 +85,12 @@ func TestAgent_StoreThenRecall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = a.callTool(ctx, "update_summary", map[string]interface{}{
-		"path":       a.sessionPath,
-		"old_summary": header.Summary,
-		"new_summary": header.Summary + " 张三 API 设计",
-		"reason":      "更新摘要包含关键词以便检索",
+	_, err = a.callTool(ctx, "update", map[string]interface{}{
+		"path": a.sessionPath,
+		"summary": map[string]interface{}{
+			"old": header.Summary, "new": header.Summary + " 张三 API 设计",
+			"reason": "更新摘要包含关键词以便检索",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -375,7 +376,7 @@ func TestExtractEvents_DeepLoadResponse(t *testing.T) {
 	a.Store(ctx, "event one", "test")
 	a.Store(ctx, "event two", "test")
 
-	resp, err := a.callTool(ctx, "deep_load", map[string]interface{}{
+	resp, err := a.callTool(ctx, "show", map[string]interface{}{
 		"path":   a.sessionPath,
 		"window": "recent",
 	})
@@ -445,11 +446,12 @@ func TestAgent_FullLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.callTool(ctx, "update_summary", map[string]interface{}{
-		"path":      a.sessionPath,
-		"old_summary": header.Summary,
-		"new_summary": header.Summary + " 项目A",
-		"reason":      "添加关键词以便检索测试",
+	_, err = a.callTool(ctx, "update", map[string]interface{}{
+		"path": a.sessionPath,
+		"summary": map[string]interface{}{
+			"old": header.Summary, "new": header.Summary + " 项目A",
+			"reason": "添加关键词以便检索测试",
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

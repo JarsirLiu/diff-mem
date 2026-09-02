@@ -13,7 +13,7 @@ AI Agent 长期记忆系统。LLM 作为策略层输出符号化工具调用，�
                               ┌───────┼───────┐
                               │       │       │
                         ┌─────┴──┐┌──┴──┐┌──┴────┐
-                        │Store  ││Graph││Validator│
+                        │Store  ││Validator│
                         └────────┘└─────┘└────────┘
 ```
 
@@ -21,7 +21,7 @@ AI Agent 长期记忆系统。LLM 作为策略层输出符号化工具调用，�
 
 - **节点 (Node)**: 路径 + Header（轻量索引）+ Body（不可变事件流）
 - **状态**: active / archived（二态，可恢复）
-- **引用**: depends_on / alternative_to / supersedes / references
+- **内容链接**: Body 事件中的 `[[/path]]` 引用，写侧门禁校验、读侧自动发现（links + backlinks）
 - **检索**: 逐步导航 + 倒排索引，模型永不面对全量数据
 
 ## 快速开始
@@ -47,9 +47,8 @@ cmd/
 internal/
   agent/         Agent 核心 + REPL
   api/           HTTP 路由
-  engine/        引擎（调度 + 读写 + 生命周期 + 图操作）
-  graph/         图算法（BFS / 环检测 / 并查集 / 实体提取）
-  mcp/           MCP 协议层（14 个工具）
+  engine/        引擎（调度 + 读写 + 生命周期 + 内容链接门禁）
+  mcp/           MCP 协议层（11 个工具）
   model/         数据模型
   store/         存储层（内存 + BadgerDB）
   validator/     语义验证
@@ -65,22 +64,19 @@ docs/            设计规范文档
 
 ## 工具列表
 
+MCP 暴露 7 个工具：
+
 | 工具 | 说明 |
 |------|------|
-| `diff_mem_create` | 创建新节点 |
-| `diff_mem_append` | 追加事件 |
-| `diff_mem_update_field` | 更新字段 |
-| `diff_mem_update_summary` | 更新摘要（含漂移检测） |
-| `diff_mem_delete` | 永久删除 |
-| `diff_mem_archive` | 归档 |
-| `diff_mem_restore` | 恢复 |
-| `diff_mem_link` | 建立引用 |
-| `diff_mem_unlink` | 解除引用 |
+| `diff_mem_create` | 创建新节点（Body 支持 `[[/path]]` 内容链接） |
+| `diff_mem_append` | 追加事件（链接目标不存在则拒绝） |
+| `diff_mem_update` | 更新 Header：fields 批量改字段 / summary 刷新摘要（含漂移检测），可同时提交 |
+| `diff_mem_lifecycle` | 生命周期状态转换：delete（被链接时拒绝）/ archive（被链接时警告）/ restore |
 | `diff_mem_list` | 列出子节点 |
 | `diff_mem_search` | 搜索 |
-| `diff_mem_show` | 查看节点 |
-| `diff_mem_deep_load` | 加载事件流 |
-| `diff_mem_exec` | 原子事务 |
+| `diff_mem_show` | 查看节点：不传 window 看 Header + links/backlinks；传 window 加载 Body 事件流 |
+
+事务（`diff_mem_exec`）仅通过 HTTP `/tools/exec` 暴露，不占 MCP 工具位。
 
 ## 测试
 

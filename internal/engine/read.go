@@ -133,7 +133,11 @@ func (e *Engine) Show(path string) *model.ToolResponse {
 		return fail("PATH_NOT_FOUND", "path not found: "+path)
 	}
 	e.store.PutNode(node)
-	return success(node.Header)
+	// Content links + backlinks: AI sees related entries and decides whether to look.
+	result := model.ShowResult{Header: node.Header}
+	result.Links = nodeContentLinks(node)
+	result.Backlinks = e.findReferrers(path, path)
+	return success(result)
 }
 
 func (e *Engine) DeepLoad(path string, window string) *model.ToolResponse {
@@ -159,6 +163,7 @@ func (e *Engine) DeepLoad(path string, window string) *model.ToolResponse {
 	return success(model.DeepLoadResult{
 		Path: path, Events: events,
 		Total: node.Header.EventCount, HasMore: node.Header.EventCount > len(events),
+		Links: nodeContentLinks(node),
 	})
 }
 

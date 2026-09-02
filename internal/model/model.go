@@ -13,16 +13,6 @@ const (
 	StatusArchived Status = "archived"
 )
 
-// EdgeType represents the semantic relationship between two nodes.
-type EdgeType string
-
-const (
-	EdgeDependsOn    EdgeType = "depends_on"
-	EdgeAlternative  EdgeType = "alternative_to"
-	EdgeSupersedes   EdgeType = "supersedes"
-	EdgeReferences   EdgeType = "references"
-)
-
 // Header is the lightweight index of a node — metadata + summary + fields.
 type Header struct {
 	Path         string            `json:"path"`
@@ -52,13 +42,6 @@ type Node struct {
 	Events []Event
 }
 
-// Edge represents a directed relationship between two nodes.
-type Edge struct {
-	From string   `json:"from"`
-	To   string   `json:"to"`
-	Type EdgeType `json:"type"`
-}
-
 // ToolRequest is the shape of an incoming tool call.
 type ToolRequest struct {
 	ToolName string `json:"tool"`
@@ -67,11 +50,10 @@ type ToolRequest struct {
 
 // ToolResponse is the uniform response returned to the agent.
 type ToolResponse struct {
-	Success   bool            `json:"success"`
-	Result    interface{}     `json:"result,omitempty"`
-	Warning   string          `json:"warning,omitempty"`
-	Error     *ErrorInfo      `json:"error,omitempty"`
-	Impacted  []ImpactedNode  `json:"impacted,omitempty"`
+	Success bool        `json:"success"`
+	Result  interface{} `json:"result,omitempty"`
+	Warning string      `json:"warning,omitempty"`
+	Error   *ErrorInfo  `json:"error,omitempty"`
 }
 
 // ErrorInfo carries structured error details.
@@ -79,14 +61,6 @@ type ErrorInfo struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
-	Cycle      []string `json:"cycle,omitempty"`
-}
-
-// ImpactedNode describes a node affected by an operation (e.g., archive).
-type ImpactedNode struct {
-	Path     string   `json:"path"`
-	Type     EdgeType `json:"type"`
-	Distance int      `json:"distance"`
 }
 
 // SearchResultEntry is one hit from a search or list operation.
@@ -99,12 +73,20 @@ type SearchResultEntry struct {
 	Count   int      `json:"count,omitempty"`
 }
 
+// ShowResult is the response from showing a node: header + content links + backlinks.
+type ShowResult struct {
+	Header    Header   `json:"header"`
+	Links     []string `json:"links,omitempty"`
+	Backlinks []string `json:"backlinks,omitempty"`
+}
+
 // DeepLoadResult is the response from deep loading a node's body.
 type DeepLoadResult struct {
-	Path     string  `json:"path"`
-	Events   []Event `json:"events"`
-	Total    int     `json:"total"`
-	HasMore  bool    `json:"has_more"`
+	Path    string  `json:"path"`
+	Events  []Event `json:"events"`
+	Total   int     `json:"total"`
+	HasMore bool    `json:"has_more"`
+	Links   []string `json:"links,omitempty"`
 }
 
 // SearchOptions holds parameters for search/list queries.
@@ -113,14 +95,6 @@ type SearchOptions struct {
 	Keywords        string
 	Limit           int
 	IncludeArchived bool
-}
-
-// LinkOptions holds parameters for link/unlink.
-type LinkOptions struct {
-	From   string
-	To     string
-	Type   EdgeType
-	Reason string
 }
 
 // CreateOptions holds parameters for node creation.
@@ -153,6 +127,17 @@ type UpdateFieldOptions struct {
 	Field  string
 	Value  string
 	Reason string
+}
+
+// UpdateOptions holds parameters for the combined update tool:
+// batch Header fields and/or a summary refresh in one call.
+type UpdateOptions struct {
+	Path          string
+	Fields        map[string]string
+	FieldReason   string
+	OldSummary    string
+	NewSummary    string
+	SummaryReason string
 }
 
 // AppendOptions holds parameters for appending events.

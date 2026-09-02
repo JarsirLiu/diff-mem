@@ -68,7 +68,7 @@
 - `fields.*`：任意修改，每次修改追加到 Body 作为审计事件
 
 **引擎的记录机制**：
-每次 `diff_mem_update_field` 执行后，引擎自动向 Body 追加一条审计事件：
+每次 `diff_mem_update（fields）` 执行后，引擎自动向 Body 追加一条审计事件：
 
 ```json
 {
@@ -81,7 +81,7 @@
 }
 ```
 
-这意味着即使 Header 被错误修改，Agent 可以通过 deep_load 查 Body 找回旧值。
+这意味着即使 Header 被错误修改，Agent 可以通过 show(window) 查 Body 找回旧值。
 
 ### L2：软索引层 — Summary / Tags
 
@@ -106,7 +106,7 @@ active ──→ archived
 - **active**：可读写，出现在搜索结果中
 - **archived**：只读冻结，不出现在默认搜索中，可恢复
 
-节点创建时默认为 active。`diff_mem_archive` 转为 archived，`diff_mem_restore` 转回 active。没有 proposed/implemented/rejected 等中间态——记忆节点是事实记录，不是待执行的决策，不需要流程门禁。
+节点创建时默认为 active。`diff_mem_lifecycle(action=archive)` 转为 archived，`diff_mem_lifecycle(action=restore)` 转回 active。没有 proposed/implemented/rejected 等中间态——记忆节点是事实记录，不是待执行的决策，不需要流程门禁。
 
 ---
 
@@ -153,7 +153,7 @@ AI 可能在 summary 或 event 中写入**不存在的实体**：
 如果 AI 做出了错误的写入（比如把 status 从 active 改成 completed 但实际没完成）：
 
 ```
-AI 可以: diff_mem_update_field("/projects/alpha", "status", "active", reason="上一步误操作，更正")
+AI 可以: diff_mem_update(path="/projects/alpha", fields={"status": "active"}, reason="上一步误操作，更正")
 ```
 
 **回滚不是特殊操作，就是普通的字段更新**。引擎不区分"正常更新"和"回滚更新"，两者都记录到 Body。

@@ -16,13 +16,6 @@ type Store interface {
 	DeleteNode(path string) error
 	Exists(path string) bool
 
-	// Edge operations
-	AddEdge(edge model.Edge) error
-	RemoveEdge(from, to string) error
-	GetOutboundEdges(path string) []model.Edge
-	GetInboundEdges(path string) []model.Edge
-	HasEdge(from, to string) bool
-
 	// Index operations
 	BuildTagIndex() map[string][]string
 	BuildKeywordIndex() map[string][]string
@@ -33,17 +26,13 @@ type Store interface {
 
 // MemoryStore is the in-memory implementation.
 type MemoryStore struct {
-	mu      sync.RWMutex
-	nodes   map[string]*model.Node
-	outbound map[string][]model.Edge
-	inbound  map[string][]model.Edge
+	mu    sync.RWMutex
+	nodes map[string]*model.Node
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		nodes:    make(map[string]*model.Node),
-		outbound: make(map[string][]model.Edge),
-		inbound:  make(map[string][]model.Edge),
+		nodes: make(map[string]*model.Node),
 	}
 }
 
@@ -66,12 +55,6 @@ func (s *MemoryStore) DeleteNode(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.nodes, path)
-	// Clean up edges
-	for _, e := range s.outbound[path] {
-		s.removeInboundEdge(e.To, path)
-	}
-	delete(s.outbound, path)
-	delete(s.inbound, path)
 	return nil
 }
 
@@ -80,65 +63,6 @@ func (s *MemoryStore) Exists(path string) bool {
 	defer s.mu.RUnlock()
 	_, ok := s.nodes[path]
 	return ok
-}
-
-func (s *MemoryStore) AddEdge(edge model.Edge) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.outbound[edge.From] = append(s.outbound[edge.From], edge)
-	s.inbound[edge.To] = append(s.inbound[edge.To], edge)
-	return nil
-}
-
-func (s *MemoryStore) RemoveEdge(from, to string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.removeOutboundEdge(from, to)
-	s.removeInboundEdge(to, from)
-	return nil
-}
-
-func (s *MemoryStore) removeOutboundEdge(from, to string) {
-	edges := s.outbound[from]
-	for i, e := range edges {
-		if e.To == to {
-			s.outbound[from] = append(edges[:i], edges[i+1:]...)
-			return
-		}
-	}
-}
-
-func (s *MemoryStore) removeInboundEdge(to, from string) {
-	edges := s.inbound[to]
-	for i, e := range edges {
-		if e.From == from {
-			s.inbound[to] = append(edges[:i], edges[i+1:]...)
-			return
-		}
-	}
-}
-
-func (s *MemoryStore) GetOutboundEdges(path string) []model.Edge {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.outbound[path]
-}
-
-func (s *MemoryStore) GetInboundEdges(path string) []model.Edge {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.inbound[path]
-}
-
-func (s *MemoryStore) HasEdge(from, to string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, e := range s.outbound[from] {
-		if e.To == to {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *MemoryStore) BuildTagIndex() map[string][]string {

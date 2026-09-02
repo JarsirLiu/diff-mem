@@ -106,49 +106,12 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
 
 ### 2.3 `diff_mem_show`
 
-**用途**：加载单个节点的完整 Header（不含 Body 事件流）。
+**用途**：查看节点。不传 window 返回 Header + 内容链接（轻）；传 window 附带 Body 事件流（重）。AI 的自然阅读路径"先看摘要再决定要不要看正文"是同一个工具的两档深度。
 
 ```json
 {
   "name": "diff_mem_show",
-  "description": "获取指定节点的完整 Header 信息，包括标题、状态、标签、摘要、字段、更新时间、事件计数等。不包含 Body 事件详情。",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "节点的完整路径。"
-      }
-    },
-    "required": ["path"]
-  }
-}
-```
-
-**返回**：
-```json
-{
-  "path": "/Projects/Alpha/Backend",
-  "title": "Alpha 项目后端",
-  "status": "active",
-  "tags": ["backend", "api", "in-progress"],
-  "summary": "负责 Alpha 项目的 API 设计与服务端开发，当前处于开发阶段。",
-  "fields": ["owner", "deadline", "milestones"],
-  "updated": "2026-09-01T18:30:00Z",
-  "event_count": 47
-}
-```
-
----
-
-### 2.4 `diff_mem_deep_load`
-
-**用途**：加载节点的 Body 事件流。这是唯一能获取历史细节的操作。
-
-```json
-{
-  "name": "diff_mem_deep_load",
-  "description": "加载指定节点的 Body 事件流（时间线）。支持分页和范围查询。用于需要查看历史细节的场景。注意：单节点 Body 可能很长，建议按需加载。",
+  "description": "查看指定节点。不传 window：返回完整 Header（标题、状态、标签、摘要、字段等）以及 Body 中的内容链接（links）与反向链接（backlinks），用于发现相关记忆。传 window：附带 Body 事件流，用于查看历史细节。单节点 Body 可能很长，建议先看不带 window 的轻量结果再决定。",
   "parameters": {
     "type": "object",
     "properties": {
@@ -159,15 +122,33 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
       "window": {
         "type": "string",
         "enum": ["recent", "last_10", "last_50", "last_100", "all"],
-        "description": "加载范围。recent=最近 5 条，last_N=最近 N 条，all=全部。"
+        "description": "可选。传入时附带 Body 事件流：recent=最近 5 条，last_N=最近 N 条，all=全部。"
       }
     },
-    "required": ["path", "window"]
+    "required": ["path"]
   }
 }
 ```
 
-**返回**：
+**返回（不传 window）**：
+```json
+{
+  "header": {
+    "path": "/Projects/Alpha/Backend",
+    "title": "Alpha 项目后端",
+    "status": "active",
+    "tags": ["backend", "api", "in-progress"],
+    "summary": "负责 Alpha 项目的 API 设计与服务端开发，当前处于开发阶段。",
+    "fields": ["owner", "deadline", "milestones"],
+    "updated": "2026-09-01T18:30:00Z",
+    "event_count": 47
+  },
+  "links": ["/Decisions/认证方案"],
+  "backlinks": ["/Projects/Alpha"]
+}
+```
+
+**返回（传 window）**：在上述基础上附带事件流：
 ```json
 {
   "path": "/Projects/Alpha/Backend",
@@ -176,14 +157,16 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
     {"ts": "2026-08-30T14:00:00Z", "type": "update", "content": "完成 API 设计，进入开发"}
   ],
   "total": 47,
-  "has_more": true
+  "has_more": true,
+  "links": ["/Decisions/认证方案"]
 }
 ```
 
 **引擎规则**：
-- `all` 窗口也有上限：单次最多返回 500 条事件
-- 超过 500 条时返回 `has_more: true`，模型需用 `offset` 分页（Phase 2 扩展）
-- 默认 `recent`，鼓励模型按需加载
+- `links`：该节点 Body 中所有 `[[/path]]` 内容链接指向的节点
+- `backlinks`：其他活跃节点 Body 中链接到本节点的反向链接
+- window 版本 `all` 窗口也有上限：单次最多返回 500 条事件；超过返回 `has_more: true`
+- AI 看到一条记忆即可发现相关记忆，自行决定是否传 window 深入
 
 ---
 
@@ -265,14 +248,14 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
 
 ---
 
-### 3.3 `diff_mem_update_field`
+### 3.3 `diff_mem_update`
 
-**用途**：修改 Header 中的某个字段值。
+**用途**：更新节点 Header。fields 批量改字段和/或 summary 刷新摘要，一次调用完成。
 
 ```json
 {
-  "name": "diff_mem_update_field",
-  "description": "更新节点 Header 中的指定字段值。field 必须是该节点已注册过的字段名（通过 diff_mem_show 可查看）。如果需要新增字段，field 可以是新名字，引擎会自动注册。value 支持字符串类型。",
+  "name": "diff_mem_update",
+  "description": "更新节点 Header。fields 传 {字段名: 新值} 批量修改字段（字段不存在则自动注册）；summary 传 {old, new, reason} 刷新摘要——引擎对比新旧摘要，关键实体消失时需在 reason 中解释。两者可同时提交。",
   "parameters": {
     "type": "object",
     "properties": {
@@ -280,212 +263,113 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
         "type": "string",
         "description": "节点的完整路径。"
       },
-      "field": {
-        "type": "string",
-        "description": "要更新的字段名。"
+      "fields": {
+        "type": "object",
+        "description": "{字段名: 新值} 映射，批量更新字段。reason 字段作为整批字段变更的审计原因。"
       },
-      "value": {
-        "type": "string",
-        "description": "字段的新值。"
+      "summary": {
+        "type": "object",
+        "properties": {
+          "old": {"type": "string", "description": "当前摘要（从 diff_mem_show 获取，供引擎做新旧对比）。"},
+          "new": {"type": "string", "description": "新摘要。应保留旧摘要中的关键事实，仅更新变化部分。"},
+          "reason": {"type": "string", "description": "更新摘要的原因。"}
+        },
+        "description": "摘要刷新。实体消失时 reason 需解释，否则拒绝。"
       },
       "reason": {
         "type": "string",
-        "description": "更新原因。"
+        "description": "字段变更的审计原因（配合 fields 使用）。"
       }
     },
-    "required": ["path", "field", "value", "reason"]
+    "required": ["path"]
   }
 }
 ```
 
 **引擎规则**：
-- 字段名自动注册：如果 field 不存在，引擎创建它并记录初始值
+- fields 和 summary 至少提供一个，否则 `VALIDATION_FAILED`
+- 字段名自动注册：字段不存在时引擎创建它并记录初始值
 - `status` 和 `summary` 是**受保护字段**，有特殊校验（见 04-state-drift-defense.md）
-
----
-
-### 3.4 `diff_mem_update_summary`
-
-**用途**：显式刷新节点的 summary。
-
-> **注意**：这是独立 tool，不是 `diff_mem_update_field(path, "summary", ...)`。目的是让引擎对 summary 的更新施加特殊控制。
-
-```json
-{
-  "name": "diff_mem_update_summary",
-  "description": "刷新节点的摘要描述。仅在节点内容发生显著变化时使用。引擎会做新旧摘要对比，保留旧摘要的关键事实，防止信息丢失。不要频繁调用此 tool。",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "节点的完整路径。"
-      },
-      "old_summary": {
-        "type": "string",
-        "description": "当前摘要内容（供引擎做新旧对比，防止丢失关键事实）。从 diff_mem_show 获取。"
-      },
-      "new_summary": {
-        "type": "string",
-        "description": "新的摘要内容。应保留旧摘要中的关键事实，仅更新变化部分。"
-      },
-      "reason": {
-        "type": "string",
-        "description": "更新摘要的原因。"
-      }
-    },
-    "required": ["path", "old_summary", "new_summary", "reason"]
-  }
-}
-```
-
-**引擎规则（关键）**：
-- 引擎接收 old_summary 和 new_summary，做实体抽取对比
-- 如果发现旧摘要中有关键实体消失（人名/数字/日期/专有名词），检查 reason 字段
-  - reason 非空且 ≥10 字符 → 放行，同时自动向 Body 追加审计事件记录消失的实体
-  - reason 为空或 <10 字符 → 拒绝，返回消失实体列表
+- summary 漂移检测：引擎对比 old/new 摘要，发现关键实体消失（人名/数字/日期/专有名词）时检查 reason
+  - reason 非空且 ≥10 字符 → 放行，同时自动向 Body 追加审计事件
+  - reason 为空或 <10 字符 → 拒绝（`SUMMARY_DRIFT_DETECTED`），返回消失实体列表
+- summary 在**任何写入前预校验**（mismatch + drift），避免 fields 已生效而 summary 失败的部分写入
 - 引擎不对"消失的实体是否合理"做判断——只要求 AI 给出解释
-- 这个设计保证了 summary 的迭代是**增量式的**，历史变更可追溯
 
 ---
 
-### 3.5 `diff_mem_delete`
+### 3.4 `diff_mem_lifecycle`
 
-**用途**：删除节点。
+**用途**：节点生命周期状态转换。active → deleted（delete）、active ⇄ archived（archive/restore）三条边共用一个工具入口。
 
 ```json
 {
-  "name": "diff_mem_delete",
-  "description": "删除指定节点及其所有子节点。此操作不可逆。删除前建议先 diff_mem_archive 进行归档备份。",
+  "name": "diff_mem_lifecycle",
+  "description": "节点生命周期状态转换。action=delete：删除节点及所有子节点，不可逆，被其他活跃节点链接时拒绝。action=archive：归档节点，冻结（不可追加/修改）并移出默认搜索，可恢复；被链接时返回警告及处置指引。action=restore：恢复已归档节点为活跃状态。",
   "parameters": {
     "type": "object",
     "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["delete", "archive", "restore"],
+        "description": "状态转换类型。"
+      },
       "path": {
         "type": "string",
-        "description": "要删除的节点路径。"
+        "description": "目标节点路径。"
       },
       "reason": {
         "type": "string",
-        "description": "删除原因。"
+        "description": "操作原因，用于审计。"
       }
     },
-    "required": ["path", "reason"]
+    "required": ["action", "path", "reason"]
   }
 }
 ```
 
 **引擎规则**：
-- 归档后节点永久冻结，只能通过 `diff_mem_restore` 恢复
-- 有活跃节点引用该节点时，返回警告但不阻止
-- 自动向 Body 追加归档事件（时间戳 + reason）
+- **delete**（不可逆）：被其他活跃节点 Body 链接 → 拒绝（`LINKED_BY_OTHERS`），列出引用方，AI 需先修正链接；有子节点时一并删除
+- **archive**（可逆）：节点冻结，从默认搜索排除；被链接 → 警告不阻止，warning 附三选一处置指引：1) 改指到新的承接节点；2) 有意引用历史快照则保留（归档节点仍是有效链接目标）；3) 更新引用方 Body 移除链接
+- **restore**：只有 archived 节点能恢复；恢复时检查出站 `[[链接]]`，目标已删除/归档 → 警告悬空链接，AI 可立即修复
+- 操作自动向 Body 追加审计事件（archived/restored）
 
 ---
 
-### 3.7 `diff_mem_restore`
+### 3.5 内容链接门禁（作用于 create / append）
 
-**用途**：恢复已归档节点。
+> Diff-Mem 的节点间关联通过 **内容链接** 表达：在 Body 事件文本中写 `[[/path/to/node]]`。
+> 链接属于内容而非元数据——没有独立的 link/unlink 工具。
 
-```json
-{
-  "name": "diff_mem_restore",
-  "description": "恢复已归档节点为活跃状态。恢复后节点可正常读写，重新出现在搜索结果中。归档不是永久的。",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "要恢复的节点路径。"
-      },
-      "reason": {
-        "type": "string",
-        "description": "恢复原因。"
-      }
-    },
-    "required": ["path", "reason"]
-  }
-}
+**语法**：
+
+```
+事件文本示例：
+"后端模块依赖 [[/Decisions/认证方案]]，负责人张三"
 ```
 
-**引擎规则**：
-- 只有 archived 状态的节点才能恢复
-- 恢复后 Header 和 Body 解冻
-- 自动向 Body 追加恢复事件
+**引擎规则（写侧门禁）**：
+
+- create / append 时引擎用正则扫描事件文本中的所有 `[[...]]` 引用
+- 链接目标必须满足其一，否则拒绝写入（零副作用）：
+  - 目标路径已存在
+  - 目标是节点自身或其祖先路径（祖先在 create 时自动创建）
+- 目标不存在 → 返回 `LINK_TARGET_NOT_FOUND`，附带 did-you-mean 建议（最多 3 个相似路径），AI 修正后重试
+- 链接不是合法路径（不以 `/` 开头）→ 返回 `LINK_TARGET_INVALID`
+
+**读侧发现**：
+
+- `diff_mem_show` 返回 `links`（本节点指向谁）与 `backlinks`（谁链接到本节点）
+- `diff_mem_show(window)` 响应附带 `links`（全节点内容链接汇总）
+
+**生命周期门禁**（`diff_mem_lifecycle`）：
+
+- `action=delete`：目标被其他活跃节点 Body 链接 → 拒绝（`LINKED_BY_OTHERS`），列出引用方
+- `action=archive`：被链接 → 警告（附三选一处置指引），不阻止
 
 ---
 
-### 3.8 `diff_mem_link`
-
-**用途**：建立节点间的引用关系。
-
-```json
-{
-  "name": "diff_mem_link",
-  "description": "在两个记忆节点间建立引用关系，记录依赖、替代、引用等关联。用于建立记忆间的结构连接。",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "from": {
-        "type": "string",
-        "description": "发起引用的节点路径。"
-      },
-      "to": {
-        "type": "string",
-        "description": "被引用的节点路径。"
-      },
-      "type": {
-        "type": "string",
-        "enum": ["depends_on", "alternative_to", "supersedes", "references"],
-        "description": "引用类型：depends_on=依赖、alternative_to=替代方案、supersedes=替代了、references=引用了"
-      },
-      "reason": {
-        "type": "string",
-        "description": "建立引用的原因。"
-      }
-    },
-    "required": ["from", "to", "type", "reason"]
-  }
-}
-```
-
-**引擎规则**：
-- 两端节点必须存在
-- 不能自引用
-- 同类型关系已存在则拒绝（防重复）
-- 归档节点也可以建立引用，但不推荐
-
----
-
-### 3.9 `diff_mem_unlink`
-
-**用途**：移除节点间的引用关系。
-
-```json
-{
-  "name": "diff_mem_unlink",
-  "description": "移除两个节点间的引用关系。",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "from": {
-        "type": "string",
-        "description": "发起引用的节点路径。"
-      },
-      "to": {
-        "type": "string",
-        "description": "被引用的节点路径。"
-      }
-    },
-    "required": ["from", "to"]
-  }
-}
-```
-
-**引擎规则**：
-- 关系不存在 → 返回 404
-
----
-
-### 3.10 `diff_mem_exec`
+### 3.6 `diff_mem_exec`（事务，仅 HTTP）
 
 **用途**：事务执行。
 
@@ -500,7 +384,7 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
         "type": "array",
         "items": {
           "type": "object",
-          "description": "每个操作是一个 JSON 对象，包含 op 字段标识操作类型，以及对应的参数。支持的操作：CREATE, APPEND, UPDATE_FIELD, DELETE, ARCHIVE, RESTORE, LINK, UNLINK。"
+          "description": "每个操作是一个 JSON 对象，包含 op 字段标识操作类型，以及对应的参数。支持的操作：CREATE, APPEND, UPDATE_FIELD, DELETE, ARCHIVE, RESTORE。"
         },
         "minItems": 1,
         "maxItems": 20,
@@ -516,7 +400,7 @@ Diff-Mem 是一个 Tool Provider。每个记忆操作都是一个独立 Tool，�
 - 按顺序执行操作
 - 任意操作失败 → 全部回滚
 - 最大 20 个操作，防止单次事务过大
-- 不支持 `diff_mem_deep_load` 和 `diff_mem_list` 在事务中（只读操作无事务需求）
+- 不支持 list/show/search 在事务中（只读操作无事务需求）
 
 ---
 

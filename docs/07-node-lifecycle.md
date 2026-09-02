@@ -86,43 +86,34 @@ A 要归档？
 
 ## 四、归档操作
 
-### 4.1 `diff_mem_archive`
+### 4.1 `diff_mem_lifecycle`
 
 ```json
 {
-  "name": "diff_mem_archive",
-  "description": "归档指定节点。归档后节点冻结，Body 和 Header 均不可修改，从默认搜索中排除，但仍可读。归档是 AI 主动决策，引擎不自动触发。",
+  "name": "diff_mem_lifecycle",
+  "description": "节点生命周期状态转换。action=archive：归档指定节点。归档后节点冻结，Body 和 Header 均不可修改，从默认搜索中排除，但仍可读。归档是 AI 主动决策，引擎不自动触发。action=restore：恢复已归档节点为活跃状态，重新出现在搜索结果中。",
   "parameters": {
+    "action": {"type": "string", "enum": ["delete", "archive", "restore"]},
     "path": {"type": "string"},
-    "reason": {"type": "string", "description": "归档原因"}
+    "reason": {"type": "string", "description": "操作原因"}
   }
 }
 ```
 
 **引擎校验**：
 - reason 非空
-- 不能重复归档已归档节点
-- 检查入站活跃引用，有则返回警告
+- archive：不能重复归档已归档节点
+- archive：检查入站活跃引用，有则返回警告及三选一处置指引
+- restore：只有 archived 节点能恢复；恢复时检查出站链接，目标已删/归档 → 警告悬空
 
 **归档后行为**：
 - 节点状态变为 archived
 - Header 和 Body 冻结
 - 自动向 Body 追加归档事件（时间戳 + reason）
 
-### 4.2 `diff_mem_restore`
+### 4.2 恢复
 
-归档不是永久的。AI 可以恢复归档节点：
-
-```json
-{
-  "name": "diff_mem_restore",
-  "description": "恢复已归档节点为活跃状态。恢复后节点可正常读写，重新出现在搜索结果中。",
-  "parameters": {
-    "path": {"type": "string"},
-    "reason": {"type": "string", "description": "恢复原因"}
-  }
-}
-```
+归档不是永久的。AI 通过 `diff_mem_lifecycle(action=restore)` 恢复归档节点。
 
 **恢复后行为**：
 - 节点状态变为 active
@@ -131,46 +122,22 @@ A 要归档？
 
 ---
 
-## 五、节点间的引用
+## 五、节点间的引用：内容链接
 
-记忆节点之间自然存在关联。Diff-Mem 支持显式引用：
-
-```json
-{
-  "name": "diff_mem_link",
-  "description": "在两个节点间建立引用关系。用于记录依赖、关联、替代等关系。",
-  "parameters": {
-    "from": {"type": "string"},
-    "to": {"type": "string"},
-    "type": {"type": "string", "enum": ["depends_on", "alternative_to", "supersedes", "references"]},
-    "reason": {"type": "string"}
-  }
-}
-```
-
-```json
-{
-  "name": "diff_mem_unlink",
-  "description": "移除两个节点间的引用关系。",
-  "parameters": {
-    "from": {"type": "string"},
-    "to": {"type": "string"}
-  }
-}
-```
-
-**引用在归档中的角色**：
+记忆节点之间自然存在关联。Diff-Mem 用 **内容链接** 表达关联：直接写在 Body 事件文本里，语法为 `[[/path/to/node]]`。
 
 ```
-AI 要归档节点 A
-引擎检查：A 有入站引用吗？
-  → 有，来自活跃节点 B
-    → 引擎返回警告："节点 /X 仍被 /Y 引用，确认要归档？"
-    → AI 可以无视警告继续归档
-    → 也可以先 unlink 再归档
-  → 无
-    → 直接归档
+事件文本示例：
+"后端模块的方案已定，依赖 [[/Decisions/认证方案]] 的结论"
 ```
+
+**门禁行为**：
+
+- 写入时（create/append）引擎校验链接目标必须存在，悬空链接直接拒绝，AI 修正后重试
+- 读取时（show）返回 `links`（我链接了谁）与 `backlinks`（谁链接了我），AI 看到一条记忆即可发现相关记忆
+- 删除被链接的节点 → 拒绝并列出引用方；归档 → 警告但不阻止
+
+详细规则见 01-tool-registry.md §3.8 与 08-content-links.md。
 
 ---
 
@@ -178,8 +145,8 @@ AI 要归档节点 A
 
 | 操作 | 数据保留 | 可恢复 | 何时用 |
 |------|---------|--------|--------|
-| archive | 全部保留，冻结 | 可 restore | 不确定未来是否还需要 |
-| delete | 永久删除 | 不可恢复 | 确定永远不需要 |
+| archive | 全部保留，冻结 | 可 restore | 不确定未来是否还需要（被链接时警告） |
+| delete | 永久删除 | 不可恢复 | 确定永远不需要（被链接时拒绝） |
 
 默认倾向 archive 而不是 delete——记忆宁可多留别误删。
 

@@ -2,46 +2,46 @@
 package engine
 
 import (
-	"github.com/diff-mem/diff-mem/internal/graph"
 	"github.com/diff-mem/diff-mem/internal/model"
 	"github.com/diff-mem/diff-mem/internal/store"
 )
 
 type Engine struct {
 	store store.Store
-	graph *graph.Graph
+	links *linkIndex
 }
 
 func New(s store.Store) *Engine {
-	return &Engine{
-		store: s,
-		graph: graph.New(s),
+	e := &Engine{store: s, links: newLinkIndex()}
+	// Rebuild the backlink index from persisted data (no-op on empty store).
+	for _, node := range s.AllNodes() {
+		e.links.addLinks(node.Header.Path, nodeContentLinks(node))
 	}
+	return e
 }
 
 // Dispatch routes a tool name + params to the appropriate handler.
+// Tool surface: create, append, update, lifecycle, list, search, show.
 func (e *Engine) Dispatch(name string, params map[string]interface{}) *model.ToolResponse {
 	switch name {
 	case "create":
 		return e.Create(extractCreate(params))
 	case "append":
 		return e.Append(extractAppend(params))
-	case "update_field":
-		return e.UpdateField(extractUpdateField(params))
-	case "update_summary":
-		return e.UpdateSummary(extractUpdateSummary(params))
-	case "delete":
-		return e.Delete(extractArchive(params))
-	case "archive":
-		return e.Archive(extractArchive(params))
-	case "restore":
-		return e.Restore(extractArchive(params))
-	case "link":
-		return e.Link(extractLink(params))
-	case "unlink":
-		from, _ := params["from"].(string)
-		to, _ := params["to"].(string)
-		return e.Unlink(from, to)
+	case "update":
+		return e.Update(extractUpdate(params))
+	case "lifecycle":
+		action, opts := extractLifecycle(params)
+		switch action {
+		case "delete":
+			return e.Delete(opts)
+		case "archive":
+			return e.Archive(opts)
+		case "restore":
+			return e.Restore(opts)
+		default:
+			return fail("VALIDATION_FAILED", "action must be one of: delete, archive, restore")
+		}
 	case "list":
 		path, _ := params["path"].(string)
 		inc, _ := params["include_archived"].(bool)
@@ -50,10 +50,10 @@ func (e *Engine) Dispatch(name string, params map[string]interface{}) *model.Too
 		return e.Search(extractSearch(params))
 	case "show":
 		path, _ := params["path"].(string)
-		return e.Show(path)
-	case "deep_load":
-		path, _ := params["path"].(string)
 		window, _ := params["window"].(string)
+		if window == "" {
+			return e.Show(path)
+		}
 		return e.DeepLoad(path, window)
 	default:
 		return fail("UNKNOWN_TOOL", "unknown tool: "+name)

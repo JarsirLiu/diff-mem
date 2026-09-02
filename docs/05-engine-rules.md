@@ -42,24 +42,19 @@ Tool Call 进入引擎
 | 操作 | 路径必须存在？ | 不存在时的行为 |
 |------|-------------|---------------|
 | `diff_mem_list` | ✅ | 返回 404 + did-you-mean |
-| `diff_mem_show` | ✅ | 返回 404 |
-| `diff_mem_deep_load` | ✅ | 返回 404 |
+| `diff_mem_show` | ✅ | 返回 404（含 window 版） |
 | `diff_mem_append` | ✅ | 返回 404 |
-| `diff_mem_update_field` | ✅ | 返回 404 |
-| `diff_mem_delete` | ✅ | 返回 404 |
-| `diff_mem_archive` | ✅ | 返回 404 |
+| `diff_mem_update` | ✅ | 返回 404 |
+| `diff_mem_lifecycle` | ✅ | 返回 404 |
 | `diff_mem_create` | ❌ | 已存在 → 返回冲突 |
-| `diff_mem_update_summary` | ✅ | 返回 404 |
 
 ### 2.3 路径状态
 
 | 操作 | 节点已归档？ | 归档时的行为 |
 |------|-----------|-------------|
 | `diff_mem_append` | 不可追加到归档节点 | ❌ 返回 "节点已归档，不能追加事件" |
-| `diff_mem_update_field` | 不可修改归档节点 | ❌ 返回 "节点已归档，不能修改字段" |
-| `diff_mem_update_summary` | 不可修改归档节点 | ❌ 返回 "节点已归档" |
-| `diff_mem_show` | 允许读取归档节点 | ✅ |
-| `diff_mem_deep_load` | 允许读取归档节点 | ✅ |
+| `diff_mem_update` | 不可修改归档节点 | ❌ 返回 "节点已归档" |
+| `diff_mem_show` | 允许读取归档节点 | ✅（含 window 版） |
 | `diff_mem_list` | 默认不显示归档节点 | 除非 include_archived=true |
 | `diff_mem_search` | 默认不搜索归档节点 | 除非 include_archived=true |
 
@@ -90,7 +85,7 @@ Tool Call 进入引擎
 | event 长度 | ≤ 2000 字符 |
 | reason 非空 | 不能为空 |
 
-### 3.3 `diff_mem_update_field`
+### 3.3 `diff_mem_update`（fields）
 
 | 校验项 | 规则 |
 |--------|------|
@@ -101,7 +96,7 @@ Tool Call 进入引擎
 | value 非空 | 不能为空字符串 |
 | value 长度 | ≤ 5000 字符 |
 
-### 3.4 `diff_mem_update_summary`
+### 3.4 `diff_mem_update`（summary）
 
 | 校验项 | 规则 |
 |--------|------|
@@ -113,7 +108,7 @@ Tool Call 进入引擎
 | 新旧对比通过 | 引擎抽取实体对比；old 中有实体消失时，reason 必须非空且 ≥10 字符 |
 | 频率未超限 | 该节点今日内更新未超过 10 次 |
 
-### 3.5 `diff_mem_delete`
+### 3.5 `diff_mem_lifecycle`（action=delete）
 
 | 校验项 | 规则 |
 |--------|------|
@@ -122,8 +117,9 @@ Tool Call 进入引擎
 | 不能删除 meta 节点 | 不能删除引擎的元数据节点 |
 | reason 非空 | 不能为空 |
 | 子节点处理 | 有子节点时，引擎在删除前记录所有子路径到操作日志 |
+| 内容链接检查 | 被其他活跃节点 Body 链接 → 拒绝（`LINKED_BY_OTHERS`） |
 
-### 3.6 `diff_mem_archive`
+### 3.6 `diff_mem_lifecycle`（action=archive）
 
 | 校验项 | 规则 |
 |--------|------|
@@ -133,7 +129,7 @@ Tool Call 进入引擎
 | reason 非空 | 不能为空 |
 | 入站活跃引用检查 | 有活跃节点引用该节点 → 返回警告但不阻止 |
 
-### 3.7 `diff_mem_restore`
+### 3.7 `diff_mem_lifecycle`（action=restore）
 
 | 校验项 | 规则 |
 |--------|------|
@@ -141,31 +137,22 @@ Tool Call 进入引擎
 | 节点已归档 | 只有 archived 节点才能恢复 |
 | reason 非空 | 不能为空 |
 
-### 3.8 `diff_mem_link`
+### 3.8 内容链接门禁（作用于 create / append）
 
 | 校验项 | 规则 |
 |--------|------|
-| from 存在 | 必须存在 |
-| to 存在 | 必须存在 |
-| from ≠ to | 不能自引用 |
-| 关系不存在 | 同类型关系已存在 → 拒绝 |
-| type 合法 | 必须在枚举范围内 |
-| reason 非空 | 不能为空 |
+| 链接语法 | Body 事件中的 `[[...]]` 必须是以 `/` 开头的记忆路径 |
+| 目标存在 | 链接目标必须已存在，或为节点自身/祖先路径（create 时自动创建） |
+| 悬空链接 | 目标不存在 → 拒绝写入（`LINK_TARGET_NOT_FOUND`），附带 did-you-mean 建议 |
+| 反向引用 | 内存倒排索引（create/append 增量维护，启动时全量重建） |
+| 生命周期 | delete：被链接 → 拒绝；archive：被链接 → 警告 |
 
-### 3.9 `diff_mem_unlink`
-
-| 校验项 | 规则 |
-|--------|------|
-| from 存在 | 必须存在 |
-| to 存在 | 必须存在 |
-| 关系存在 | 关系不存在 → 返回 404 |
-
-### 3.10 `diff_mem_exec`（事务）
+### 3.9 `diff_mem_exec`（事务）
 
 | 校验项 | 规则 |
 |--------|------|
 | 操作数量 | 1-20 个 |
-| 不支持的操作 | list/show/search/deep_load 不能在事务中 |
+| 不支持的操作 | list/show/search 不能在事务中 |
 | 顺序校验 | 所有操作按顺序预校验通过后才开始执行 |
 | 原子性 | 任意操作失败 → 全部回滚 |
 
@@ -177,10 +164,10 @@ Tool Call 进入引擎
 |------|---------|------|
 | `diff_mem_create` | ≤ 100 次 | 每小时 |
 | `diff_mem_append` | ≤ 500 次 | 每小时 |
-| `diff_mem_update_field` | ≤ 200 次 | 每小时 |
-| `diff_mem_update_summary` | ≤ 10 次 | 每天/每节点 |
-| `diff_mem_delete` | ≤ 20 次 | 每小时 |
-| `diff_mem_deep_load` | ≤ 200 次 | 每小时 |
+| `diff_mem_update`（fields） | ≤ 200 次 | 每小时 |
+| `diff_mem_update`（summary） | ≤ 10 次 | 每天/每节点 |
+| `diff_mem_lifecycle`（delete） | ≤ 20 次 | 每小时 |
+| `diff_mem_show`（window） | ≤ 200 次 | 每小时 |
 | `diff_mem_search` | ≤ 500 次 | 每小时 |
 
 超限行为：返回错误 `"RATE_LIMITED: 请稍后重试"`，不执行。
@@ -232,9 +219,9 @@ Tool Call 进入引擎
 | 操作 | 重复执行行为 |
 |------|-------------|
 | `diff_mem_append` | 重复追加（不做去重，见 [04.md](./04-state-drift-defense.md)） |
-| `diff_mem_update_field` | 覆盖为相同值（等价于无操作，但审计日志仍记录） |
+| `diff_mem_update`（fields） | 覆盖为相同值（等价于无操作，但审计日志仍记录） |
 | `diff_mem_create` | 返回冲突错误（不重复创建） |
-| `diff_mem_delete` | 第二次返回 404 |
-| `diff_mem_archive` | 第二次返回"已归档"错误 |
+| `diff_mem_lifecycle`（delete） | 第二次返回 404 |
+| `diff_mem_lifecycle`（archive） | 第二次返回"已归档"错误 |
 
 **事务的幂等性**：`diff_mem_exec` 内部没有幂等保证，由 Agent 自行处理。

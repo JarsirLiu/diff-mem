@@ -84,7 +84,7 @@ func (a *Agent) Init(ctx context.Context) error {
 	return nil
 }
 
-// Recall retrieves relevant memories using the search → show → deep_load pipeline.
+// Recall retrieves relevant memories using the search → show → show(window) pipeline.
 func (a *Agent) Recall(ctx context.Context, query string) ([]*RecallResult, error) {
 	// Step 1: search for candidates
 	searchResp, err := a.callTool(ctx, "search", map[string]interface{}{
@@ -131,9 +131,9 @@ func (a *Agent) Recall(ctx context.Context, query string) ([]*RecallResult, erro
 		results = append(results, result)
 	}
 
-	// Step 3: deep_load events for each result (top 2)
+	// Step 3: load recent events for each result (top 2)
 	for _, r := range results[:min(len(results), 2)] {
-		deepResp, err := a.callTool(ctx, "deep_load", map[string]interface{}{
+		deepResp, err := a.callTool(ctx, "show", map[string]interface{}{
 			"path":   r.Path,
 			"window": "recent",
 		})
@@ -228,7 +228,8 @@ func (a *Agent) ForgetPath(ctx context.Context, path string, reason string) erro
 	if strings.TrimSpace(reason) == "" {
 		reason = "agent 清理旧记忆"
 	}
-	resp, err := a.callTool(ctx, "archive", map[string]interface{}{
+	resp, err := a.callTool(ctx, "lifecycle", map[string]interface{}{
+		"action": "archive",
 		"path":   path,
 		"reason": reason,
 	})
@@ -344,6 +345,11 @@ func extractHeader(result interface{}) (*model.Header, error) {
 	b, err := json.Marshal(result)
 	if err != nil {
 		return nil, err
+	}
+	// Show returns ShowResult{header, links, backlinks}; the header fields sit one level down.
+	var show model.ShowResult
+	if err := json.Unmarshal(b, &show); err == nil && show.Header.Path != "" {
+		return &show.Header, nil
 	}
 	var header model.Header
 	if err := json.Unmarshal(b, &header); err != nil {

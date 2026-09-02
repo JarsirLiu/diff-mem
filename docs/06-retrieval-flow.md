@@ -25,7 +25,7 @@ Agent 思考: 我需要找到相关记忆
 └─────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────┐
-│ Step 3: deep_load 相关节点          │  ← 看历史事件细节
+│ Step 3: show(window) 相关节点        │  ← 看历史事件细节
 │ 回答用户问题                         │
 └─────────────────────────────────────┘
 ```
@@ -47,7 +47,7 @@ Agent 思考: 我需要找到相关记忆
 | 知道标签 | `search(tags=["bug"])` | "找 bug 相关的" |
 | 知道关键词 | `search(keywords="登录")` | "搜索登录相关" |
 | 知道精确路径 | `show("/projects/alpha")` | "看 Alpha 项目" |
-| 需要历史细节 | `deep_load("/tasks/修复bug")` | "看修复过程的记录" |
+| 需要历史细节 | `show("/tasks/修复bug", window)` | "看修复过程的记录" |
 
 ---
 
@@ -150,11 +150,11 @@ search: 当你有线索（标签/关键词），想"定位"时用
 
 ## 五、Deep Load 的分页
 
-`diff_mem_deep_load` 加载 Body 事件流，事件可能很多：
+`diff_mem_show(window)` 加载 Body 事件流，事件可能很多：
 
 ```
 节点 /projects/alpha/backend 有 300 条事件
-Agent 调用 deep_load(path, "all")
+Agent 调用 show(path, window="all")
 ```
 
 **引擎行为**：
@@ -183,8 +183,8 @@ Phase 2 增加 offset/limit 分页参数：
 | `search(tags)` | < 5ms | 100K 节点 |
 | `search(keywords)` | < 20ms | 100K 节点 |
 | `show` | < 5ms | - |
-| `deep_load`（recent） | < 10ms | - |
-| `deep_load`（all） | < 50ms | 单节点 500 条事件 |
+| `show`（window=recent） | < 10ms | - |
+| `show`（window=all） | < 50ms | 单节点 500 条事件 |
 
 ---
 
@@ -210,7 +210,7 @@ Agent 内部推理:
        → summary: "API 设计已完成，方案在 8 月 25 日经张三确认"
        → 相关！
 
-    4. deep_load("/projects/alpha/backend/api", "recent")
+    4. show("/projects/alpha/backend/api", window="recent")
        → 最近事件:
          - [8/25] "张三确认 API 方案 v2，采用 REST 风格"
          - [8/28] "方案进入开发阶段"
@@ -225,5 +225,5 @@ Agent 内部推理:
 
 - **向量索引**：在倒排索引基础上增加向量索引，支持语义搜索
 - **跨节点查询**：一次查询返回多个节点的关联结果
-- **时间范围查询**：`deep_load` 支持按时间范围过滤
+- **时间范围查询**：`show(window)` 支持按时间范围过滤
 - **全文索引**：对 Body 事件内容建立全文索引（当前只索引 path 和 summary）

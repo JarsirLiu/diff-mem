@@ -135,27 +135,6 @@ func ValidateArchive(opts model.ArchiveOptions) string {
 	return ""
 }
 
-// ValidateLink checks LINK parameters.
-func ValidateLink(opts model.LinkOptions) string {
-	if err := ValidatePath(opts.From); err != "" {
-		return "invalid 'from' path: " + err
-	}
-	if err := ValidatePath(opts.To); err != "" {
-		return "invalid 'to' path: " + err
-	}
-	if opts.From == opts.To {
-		return "cannot self-reference"
-	}
-	if opts.Type != model.EdgeDependsOn && opts.Type != model.EdgeAlternative &&
-		opts.Type != model.EdgeSupersedes && opts.Type != model.EdgeReferences {
-		return "invalid edge type: " + string(opts.Type)
-	}
-	if strings.TrimSpace(opts.Reason) == "" {
-		return "reason is required"
-	}
-	return ""
-}
-
 // ValidateSummaryDrift checks if a summary update has disappearing entities
 // and whether the reason is substantive enough.
 func ValidateSummaryDrift(disappeared []string, reason string) (bool, []string) {

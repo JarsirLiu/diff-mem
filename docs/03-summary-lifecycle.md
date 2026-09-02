@@ -46,7 +46,7 @@
 
 ## 三、Summary 的刷新
 
-Summary 不会自动更新。只有当 AI 显式调用 `diff_mem_update_summary` 时才变化。
+Summary 不会自动更新。只有当 AI 显式调用 `diff_mem_update（summary）` 时才变化。
 
 ### 何时应该刷新
 
@@ -69,22 +69,24 @@ AI 应该在这些场景考虑刷新 summary：
 引擎不对 summary 做"必须保留全部实体"的硬约束。实体消失是正常现象——负责人变更、方案替代、信息过期都是合理的。引擎要防的不是"丢失"本身，而是"沉默的丢失"。
 
 ```
-AI 调用 diff_mem_update_summary:
+AI 调用 diff_mem_update（summary）:
 {
   "path": "/projects/alpha/backend",
-  "old_summary": "Alpha 项目后端，张三负责，deadline 9/30，API 设计完成",
-  "new_summary": "Alpha 后端进入测试，李四接替负责，deadline 10/5",
-  "reason": "张三离职，李四接替，deadline 顺延一周，API 设计信息已不重要"
+  "summary": {
+    "old": "Alpha 项目后端，张三负责，deadline 9/30，API 设计完成",
+    "new": "Alpha 后端进入测试，李四接替负责，deadline 10/5",
+    "reason": "张三离职，李四接替，deadline 顺延一周，API 设计信息已不重要"
+  }
 }
 ```
 
 **引擎执行流程**：
 
 ```
-第1步：抽取 old_summary 中的关键实体
+第1步：抽取 old 中的关键实体
    → [张三, 9/30, API, 设计完成]
 
-第2步：抽取 new_summary 中的关键实体
+第2步：抽取 new 中的关键实体
    → [李四, 10/5, Alpha, 后端]
 
 第3步：找出消失的实体
@@ -163,7 +165,7 @@ Summary（索引，概括自 Body）
 - 如果 Agent 发现 Summary 和 Body 矛盾 → 以 Body 为准，触发 summary 刷新
 
 **引擎不主动校验 Summary 与 Body 的一致性**（那需要理解语义，成本高）。一致性校验留给 Agent 发现：
-- Agent deep_load 后发现 summary 过时 → 主动刷新
+- Agent show(window) 后发现 summary 过时 → 主动刷新
 - 用户反馈"你记错了" → Agent 查 Body 修正 summary
 
 ---
@@ -172,14 +174,14 @@ Summary（索引，概括自 Body）
 
 ### 节点归档时
 
-节点 `diff_mem_archive` 后：
+节点 `diff_mem_lifecycle(action=archive)` 后：
 - Summary 冻结，不再允许更新
 - 但 `diff_mem_show` 仍可读取
 - 搜索时默认排除归档节点
 
 ### 节点删除时
 
-节点 `diff_mem_delete` 后：
+节点 `diff_mem_lifecycle(action=delete)` 后：
 - Summary 随节点一起删除
 - 但删除操作本身记录在全局操作日志中
 

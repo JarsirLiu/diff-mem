@@ -17,15 +17,15 @@ func (e *Engine) Delete(opts model.ArchiveOptions) *model.ToolResponse {
 	if !e.store.Exists(opts.Path) {
 		return fail("PATH_NOT_FOUND", "path not found: "+opts.Path)
 	}
-	inbound := e.graph.InboundReachable(opts.Path, 1)
-	if len(inbound) > 0 {
-		paths := make([]string, len(inbound))
-		for i, n := range inbound {
-			paths[i] = n.Path
-		}
-		return fail("ACTIVE_DEPENDENCIES", "node is referenced by active nodes: "+strings.Join(paths, ", "))
+	// Gate: other active nodes' bodies link here — deleting would leave dangling links.
+	referrers := e.findReferrers(opts.Path, opts.Path)
+	if len(referrers) > 0 {
+		return fail("LINKED_BY_OTHERS",
+			"node body is linked by active nodes: "+strings.Join(referrers, ", "),
+			"先更新这些节点的 Body，移除或修正 [[链接]] 后再删除")
 	}
 	e.store.DeleteNode(opts.Path)
+	e.links.removeNode(opts.Path)
 	return success(map[string]string{"deleted": opts.Path, "reason": opts.Reason})
 }
 
@@ -41,14 +41,6 @@ func (e *Engine) Archive(opts model.ArchiveOptions) *model.ToolResponse {
 		return fail("NODE_ALREADY_ARCHIVED", "node is already archived")
 	}
 
-	impacted := e.graph.OutboundReachable(opts.Path, 3)
-	var impactedNodes []model.ImpactedNode
-	for _, r := range impacted {
-		impactedNodes = append(impactedNodes, model.ImpactedNode{
-			Path: r.Path, Type: r.Type, Distance: r.Distance,
-		})
-	}
-
 	node.Header.Status = model.StatusArchived
 	node.Header.UpdatedAt = time.Now()
 	node.Events = append(node.Events, model.Event{
@@ -60,9 +52,13 @@ func (e *Engine) Archive(opts model.ArchiveOptions) *model.ToolResponse {
 	e.store.PutNode(node)
 
 	resp := success(node.Header)
-	resp.Impacted = impactedNodes
-	if len(impactedNodes) > 0 {
-		resp.Warning = "归档此节点会影响 " + idx(len(impactedNodes)) + " 个下游节点"
+	// Warning: inbound links will dangle while archived. Give the AI explicit
+	// options for handling them (modeled after deepseek-harness archive rules).
+	if referrers := e.findReferrers(opts.Path, opts.Path); len(referrers) > 0 {
+		resp.Warning = "以下活跃节点的 Body 链接了此节点，归档期间这些链接不可解析：" + strings.Join(referrers, ", ") +
+			"。请处置这些 [[链接]]：1) 若有新的承接节点，将链接改指到它；" +
+			"2) 若有意引用历史快照，可保留链接（归档节点仍是有效链接目标）；" +
+			"3) 若链接已无意义，更新对应节点的 Body 移除该链接"
 	}
 	return resp
 }
@@ -88,5 +84,29 @@ func (e *Engine) Restore(opts model.ArchiveOptions) *model.ToolResponse {
 	})
 	node.Header.EventCount = len(node.Events)
 	e.store.PutNode(node)
-	return success(node.Header)
+
+	resp := success(node.Header)
+	// Warning: outbound [[links]] in the body may dangle if their targets were
+	// deleted (or archived) while this node was archived.
+	if dangling := e.danglingOutboundLinks(node); len(dangling) > 0 {
+		resp.Warning = "本节点的 Body 中以下 [[链接]] 目标当前不存在：" + strings.Join(dangling, ", ") +
+			"。请更新 Body 修正或移除这些链接"
+	}
+	return resp
+}
+
+// danglingOutboundLinks returns the node's content links whose targets no
+// longer exist or are archived (unresolvable while archived).
+func (e *Engine) danglingOutboundLinks(node *model.Node) []string {
+	var dangling []string
+	for _, target := range nodeContentLinks(node) {
+		if target == node.Header.Path {
+			continue
+		}
+		t, ok := e.store.GetNode(target)
+		if !ok || t.Header.Status != model.StatusActive {
+			dangling = append(dangling, target)
+		}
+	}
+	return dangling
 }

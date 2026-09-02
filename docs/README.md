@@ -17,14 +17,14 @@
 
 | 文档 | 内容 |
 |------|------|
-| [01-tool-registry.md](./01-tool-registry.md) | 15 个 Tool 的完整定义、参数 Schema、返回约定、调用流程 |
+| [01-tool-registry.md](./01-tool-registry.md) | 11 个注册 Tool 与 exec 事务的完整定义、参数 Schema、返回约定、调用流程 |
 | [02-path-naming.md](./02-path-naming.md) | Path 命名：AI 提交命名意图 → 引擎 6 步规范化 → 冲突检测，根层级自由 |
 | [03-summary-lifecycle.md](./03-summary-lifecycle.md) | Summary 生命周期：AI 生成 → 引擎新旧对比防丢失 → 频率限速 |
 | [04-state-drift-defense.md](./04-state-drift-defense.md) | 三层防线：Body 不可漂 / Header 受控 / Summary 软索引 |
 | [05-engine-rules.md](./05-engine-rules.md) | 引擎校验规则全集：路径、操作语义、频率配额、错误码 |
-| [06-retrieval-flow.md](./06-retrieval-flow.md) | 检索完整链路：list 导航 + search 索引 + deep_load |
-| [07-node-lifecycle.md](./07-node-lifecycle.md) | 节点生命周期：active/archived 二态，引用关系，归档与恢复 |
-| [08-memory-graph.md](./08-memory-graph.md) | 记忆图谱：引用图上的图算法（可达性、环检测、连通分量、图增强检索） |
+| [06-retrieval-flow.md](./06-retrieval-flow.md) | 检索完整链路：list 导航 + search 索引 + show(window) |
+| [07-node-lifecycle.md](./07-node-lifecycle.md) | 节点生命周期：active/archived 二态，内容链接，归档与恢复 |
+| [08-content-links.md](./08-content-links.md) | 内容链接：`[[/path]]` 语法、写侧门禁、读侧发现（links/backlinks）、生命周期门禁 |
 
 ---
 
@@ -38,7 +38,7 @@
 
 ### 决策 2：Summary 由 AI 决定，引擎做新旧对比
 
-- **选择**：`diff_mem_update_summary` 要求提交 old_summary + new_summary，引擎抽取实体对比；有实体消失时要求 AI 在 reason 中解释，不做硬阻塞
+- **选择**：`diff_mem_update` 的 summary 要求提交 old + new，引擎抽取实体对比；有实体消失时要求 AI 在 reason 中解释，不做硬阻塞
 - **拒绝的方案**：引擎自动从 Body 生成 summary（需要 LLM，成本高）；硬性要求保留全部旧实体（阻碍正常变更）；完全不校验（漂移不可控）
 - **理由**：实体消失是正常的（人走了、方案换了），引擎防的不是"消失"本身，而是"AI 不知道自己丢了什么"
 
@@ -60,8 +60,8 @@
 - **拒绝的方案**：proposed/implemented/rejected 等中间态——那是文档流转的门禁，记忆节点是事实记录，不需要流程门禁
 - **理由**：记忆的价值在于"是否还被需要"，不在于"流程走完了没有"。归档时机由 AI 自主判断（信息是否被消费、是否还有引用、重新被需要的可能性）
 
-### 决策 6：引用关系构成图，不是简单的查表
+### 决策 6：节点关联用内容链接，不用结构化边
 
-- **选择**：节点间的引用关系维护为有向异构图，引擎在此图上实现可达性分析、环检测、连通分量、图增强检索
-- **拒绝的方案**：引用关系只存不查（建了边但从不使用，浪费了结构信息）
-- **理由**：引用图的真正价值在两个地方——归档前的影响评估（可达性）和检索时的关联召回（图增强搜索）。前者防止误操作，后者直接提升记忆系统的智能度
+- **选择**：节点间的关联通过 Body 事件文本中的 `[[/path]]` 内容链接表达，引擎做写侧门禁（悬空链接拒绝写入）与读侧发现（links/backlinks）
+- **拒绝的方案**：结构化边表 + link/unlink 工具（多两个工具、边的一致性靠调用方维护、Header 被关系元数据污染）
+- **理由**：链接属于内容——AI 写事件时顺手写链接，读记忆时自然看见邻居；门禁保证链接永不悬空，错误由 AI 修正重试。关系历史随事件流天然可审计

@@ -213,37 +213,6 @@ func TestValidateArchive_EmptyReason(t *testing.T) {
 	}
 }
 
-func TestValidateLink_AllValid(t *testing.T) {
-	opts := model.LinkOptions{From: "/a", To: "/b", Type: model.EdgeDependsOn, Reason: "r"}
-	if err := validator.ValidateLink(opts); err != "" {
-		t.Fatalf("valid link should pass: %s", err)
-	}
-}
-
-func TestValidateLink_SelfReference(t *testing.T) {
-	opts := model.LinkOptions{From: "/a", To: "/a", Type: model.EdgeDependsOn, Reason: "r"}
-	if err := validator.ValidateLink(opts); err == "" {
-		t.Fatal("self-reference should be rejected")
-	}
-}
-
-func TestValidateLink_InvalidType(t *testing.T) {
-	opts := model.LinkOptions{From: "/a", To: "/b", Type: "invalid_type", Reason: "r"}
-	if err := validator.ValidateLink(opts); err == "" {
-		t.Fatal("invalid edge type should be rejected")
-	}
-}
-
-func TestValidateLink_AllEdgeTypes(t *testing.T) {
-	types := []model.EdgeType{model.EdgeDependsOn, model.EdgeAlternative, model.EdgeSupersedes, model.EdgeReferences}
-	for _, tp := range types {
-		opts := model.LinkOptions{From: "/a", To: "/b", Type: tp, Reason: "r"}
-		if err := validator.ValidateLink(opts); err != "" {
-			t.Errorf("edge type %q should be valid: %s", tp, err)
-		}
-	}
-}
-
 func TestValidateSummaryDrift_NoDisappeared(t *testing.T) {
 	needs, _ := validator.ValidateSummaryDrift(nil, "")
 	if needs {
@@ -354,28 +323,5 @@ func TestValidateArchive_InvalidPath(t *testing.T) {
 	err := validator.ValidateArchive(opts)
 	if err == "" {
 		t.Fatal("invalid path in Archive should be rejected")
-	}
-}
-
-func TestValidateLink_InvalidFrom(t *testing.T) {
-	opts := model.LinkOptions{From: "", To: "/b", Type: model.EdgeDependsOn, Reason: "r"}
-	err := validator.ValidateLink(opts)
-	if err == "" {
-		t.Fatal("invalid from path should be rejected")
-	}
-}
-
-func TestValidateLink_InvalidTo(t *testing.T) {
-	opts := model.LinkOptions{From: "/a", To: "", Type: model.EdgeDependsOn, Reason: "r"}
-	err := validator.ValidateLink(opts)
-	if err == "" {
-		t.Fatal("invalid to path should be rejected")
-	}
-}
-
-func TestValidateLink_EmptyReason(t *testing.T) {
-	opts := model.LinkOptions{From: "/a", To: "/b", Type: model.EdgeDependsOn, Reason: ""}
-	if err := validator.ValidateLink(opts); err == "" {
-		t.Fatal("empty reason in Link should be rejected")
 	}
 }

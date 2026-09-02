@@ -69,21 +69,39 @@ func extractArchive(params map[string]interface{}) model.ArchiveOptions {
 	return opts
 }
 
-func extractUpdateSummary(params map[string]interface{}) model.UpdateSummaryOptions {
-	opts := model.UpdateSummaryOptions{}
+func extractUpdate(params map[string]interface{}) model.UpdateOptions {
+	opts := model.UpdateOptions{}
 	if v, ok := params["path"].(string); ok {
 		opts.Path = v
 	}
-	if v, ok := params["old_summary"].(string); ok {
-		opts.OldSummary = v
-	}
-	if v, ok := params["new_summary"].(string); ok {
-		opts.NewSummary = v
-	}
 	if v, ok := params["reason"].(string); ok {
-		opts.Reason = v
+		opts.FieldReason = v
+	}
+	if v, ok := params["fields"].(map[string]interface{}); ok {
+		opts.Fields = make(map[string]string, len(v))
+		for k, val := range v {
+			if s, ok := val.(string); ok {
+				opts.Fields[k] = s
+			}
+		}
+	}
+	if v, ok := params["summary"].(map[string]interface{}); ok {
+		if s, ok := v["old"].(string); ok {
+			opts.OldSummary = s
+		}
+		if s, ok := v["new"].(string); ok {
+			opts.NewSummary = s
+		}
+		if s, ok := v["reason"].(string); ok {
+			opts.SummaryReason = s
+		}
 	}
 	return opts
+}
+
+func extractLifecycle(params map[string]interface{}) (string, model.ArchiveOptions) {
+	action, _ := params["action"].(string)
+	return action, extractArchive(params)
 }
 
 func extractSearch(params map[string]interface{}) model.SearchOptions {
@@ -103,23 +121,6 @@ func extractSearch(params map[string]interface{}) model.SearchOptions {
 				opts.Tags = append(opts.Tags, s)
 			}
 		}
-	}
-	return opts
-}
-
-func extractLink(params map[string]interface{}) model.LinkOptions {
-	opts := model.LinkOptions{}
-	if v, ok := params["from"].(string); ok {
-		opts.From = v
-	}
-	if v, ok := params["to"].(string); ok {
-		opts.To = v
-	}
-	if v, ok := params["type"].(string); ok {
-		opts.Type = model.EdgeType(v)
-	}
-	if v, ok := params["reason"].(string); ok {
-		opts.Reason = v
 	}
 	return opts
 }
