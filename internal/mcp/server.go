@@ -17,9 +17,39 @@ type Server struct {
 	engine *engine.Engine
 }
 
+const serverInstructions = `
+你正在管理用户的长期记忆系统（Diff-Mem）。你的职责是选择性地把有价值的信息写入记忆树，
+而不是记录所有对话内容。以下是你必须遵守的记录规则。
+
+【该记的】
+- 用户说出的长期习惯、工作方式、偏好（例如"我每天早上喝咖啡""我习惯用 git 管理代码"）
+- 具体事实：项目进度、决策结论、截止日期、人物关系、组织架构
+- 用户的待办事项和明确承诺
+- 学习到的新知识和需要记住的教训
+- 用户状态的重大变化（如"张三离职了""项目从 A 切到 B"）
+
+【不该记的】
+- 闲聊寒暄（"早上好""在吗""哈哈"）
+- 单纯的情绪表达（"好累""好开心""烦死了"）——除非与具体事实关联
+- 已经记录过的重复信息
+- 用户明确说"不用记了""忘了吧""当没说过"的内容
+- 临时状态（"现在在吃饭""刚到家""在等车"）——除非是长期行为模式的一部分
+
+【判断原则】
+1. 3 个月后这条信息还有价值吗？没有就不记。
+2. 能清楚说出"谁在什么时候做了什么/说了什么"吗？说不清楚就别记。
+3. 同一条信息已经记过了吗？记过了就别重复记，需要更新就用 update。
+4. 每次追加事件时，reason 字段必须说明"为什么值得记"——写不出 reason 就说明不该记。
+`
+
 func New(e *engine.Engine) *Server {
 	s := &Server{
-		srv:    stdmcp.NewServer(&stdmcp.Implementation{Name: "diff-mem", Version: "0.1.0"}, nil),
+		srv: stdmcp.NewServer(&stdmcp.Implementation{
+			Name:    "diff-mem",
+			Version: "0.1.0",
+		}, &stdmcp.ServerOptions{
+			Instructions: serverInstructions,
+		}),
 		engine: e,
 	}
 	s.registerTools()
