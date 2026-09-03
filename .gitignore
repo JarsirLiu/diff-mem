@@ -11,3 +11,7 @@ Thumbs.db
 
 # ZCode internal
 .zcode/plans/
+
+# BadgerDB data
+diff-mem-data/
+diff-mem-test-data/

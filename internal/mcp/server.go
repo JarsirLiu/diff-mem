@@ -87,14 +87,6 @@ func (s *Server) Run(ctx context.Context, transport stdmcp.Transport) error {
 }
 
 // SSEHandler returns an http.Handler that serves MCP over SSE.
-// Clients connect via GET to the configured path; messages are POSTed back
-// to the session endpoint.
-//
-// Usage:
-//
-//	mux := http.NewServeMux()
-//	mux.Handle("/mcp", mcpServer.SSEHandler("/mcp"))
-//	http.ListenAndServe(":8787", mux)
 func (s *Server) SSEHandler(endpoint string) http.Handler {
 	return stdmcp.NewSSEHandler(func(req *http.Request) *stdmcp.Server {
 		return s.srv
@@ -105,25 +97,26 @@ func (s *Server) SSEHandler(endpoint string) http.Handler {
 
 func (s *Server) addTool(server *stdmcp.Server, t *stdmcp.Tool) {
 	toolName := t.Name
-	toolEngineName := toolName[len("diff_mem_"):]
-
-	// Raw AddTool requires InputSchema; use a permissive schema since
-	// the handler parses args manually.
+	engineName := toolName[len("diff_mem_"):]
+	// Raw AddTool requires InputSchema.
 	if t.InputSchema == nil {
 		t.InputSchema = json.RawMessage(`{"type":"object"}`)
 	}
 
 	server.AddTool(t, func(ctx context.Context, req *stdmcp.CallToolRequest) (*stdmcp.CallToolResult, error) {
-		var args map[string]interface{}
+		var rawArgs map[string]interface{}
 		if req.Params != nil && req.Params.Arguments != nil {
 			b, _ := json.Marshal(req.Params.Arguments)
-			json.Unmarshal(b, &args)
+			json.Unmarshal(b, &rawArgs)
 		}
-		if args == nil {
-			args = make(map[string]interface{})
+		if rawArgs == nil {
+			rawArgs = make(map[string]interface{})
 		}
 
-		resp := s.engine.Dispatch(toolEngineName, args)
+		// Map MCP tool name + params → engine dispatch name + params.
+		mappedName, mappedArgs := translateArgs(engineName, rawArgs)
+
+		resp := s.engine.Dispatch(mappedName, mappedArgs)
 		respBytes, _ := json.Marshal(resp)
 
 		var hasError bool
@@ -138,6 +131,89 @@ func (s *Server) addTool(server *stdmcp.Server, t *stdmcp.Tool) {
 			IsError: hasError,
 		}, nil
 	})
+}
+
+// translateArgs maps MCP tool calls to the engine's internal dispatch format.
+// Engine supports: create, append, update, lifecycle, list, search, show.
+func translateArgs(tool string, args map[string]interface{}) (string, map[string]interface{}) {
+	switch tool {
+	case "create":
+		return "create", args
+
+	case "append":
+		return "append", args
+
+	case "update_field":
+		field, _ := args["field"].(string)
+		value, _ := args["value"].(string)
+		delete(args, "field")
+		delete(args, "value")
+		args["fields"] = map[string]interface{}{field: value}
+		return "update", args
+
+	case "update_summary":
+		oldSummary, _ := args["old_summary"].(string)
+		newSummary, _ := args["new_summary"].(string)
+		reason, _ := args["reason"].(string)
+		delete(args, "old_summary")
+		delete(args, "new_summary")
+		args["summary"] = map[string]interface{}{
+			"old":    oldSummary,
+			"new":    newSummary,
+			"reason": reason,
+		}
+		return "update", args
+
+	case "delete":
+		args["action"] = "delete"
+		return "lifecycle", args
+
+	case "archive":
+		args["action"] = "archive"
+		return "lifecycle", args
+
+	case "restore":
+		args["action"] = "restore"
+		return "lifecycle", args
+
+	case "link":
+		from, _ := args["from"].(string)
+		to, _ := args["to"].(string)
+		edgeType, _ := args["type"].(string)
+		reason, _ := args["reason"].(string)
+		delete(args, "to")
+		delete(args, "type")
+		args["path"] = from
+		args["event"] = "[" + edgeType + "] [[" + to + "]]"
+		args["reason"] = reason
+		return "append", args
+
+	case "unlink":
+		from, _ := args["from"].(string)
+		to, _ := args["to"].(string)
+		delete(args, "to")
+		args["path"] = from
+		args["event"] = "unlink [[" + to + "]]"
+		args["reason"] = "解除引用"
+		return "append", args
+
+	case "list":
+		return "list", args
+
+	case "search":
+		return "search", args
+
+	case "show":
+		return "show", args
+
+	case "deep_load":
+		path, _ := args["path"].(string)
+		window, _ := args["window"].(string)
+		return "show", map[string]interface{}{"path": path, "window": window}
+
+	default:
+		return tool, args
+	}
 }
 
 // Serve is the public entry point.

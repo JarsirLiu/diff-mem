@@ -121,7 +121,7 @@ docs/            设计规范文档
 
 ## 工具列表
 
-MCP 暴露 14 个工具：
+MCP 暴露 13 个工具：
 
 | 工具 | 说明 |
 |------|------|
@@ -138,7 +138,8 @@ MCP 暴露 14 个工具：
 | `diff_mem_search` | 搜索（tags 精确 / keywords 模糊） |
 | `diff_mem_show` | 查看节点 Header |
 | `diff_mem_deep_load` | 加载 Body 事件流 |
-| `diff_mem_exec` | 原子事务（仅 HTTP） |
+
+`diff_mem_exec`（原子事务）仅通过 HTTP `/tools/exec` 暴露，不占 MCP 工具位。
 
 ## 测试
 

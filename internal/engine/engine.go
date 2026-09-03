@@ -13,7 +13,6 @@ type Engine struct {
 
 func New(s store.Store) *Engine {
 	e := &Engine{store: s, links: newLinkIndex()}
-	// Rebuild the backlink index from persisted data (no-op on empty store).
 	for _, node := range s.AllNodes() {
 		e.links.addLinks(node.Header.Path, nodeContentLinks(node))
 	}
@@ -91,12 +90,25 @@ func (e *Engine) Exec(operations []map[string]interface{}) *model.ToolResponse {
 		case "APPEND":
 			resp = e.Append(extractAppend(params))
 		case "UPDATE_FIELD":
-			resp = e.UpdateField(extractUpdateField(params))
+			field := params["field"].(string)
+			value := params["value"].(string)
+			params["fields"] = map[string]interface{}{field: value}
+			resp = e.Update(extractUpdate(params))
+		case "UPDATE_SUMMARY":
+			params["summary"] = map[string]interface{}{
+				"old":    params["old_summary"],
+				"new":    params["new_summary"],
+				"reason": params["reason"],
+			}
+			resp = e.Update(extractUpdate(params))
 		case "DELETE":
+			params["action"] = "delete"
 			resp = e.Delete(extractArchive(params))
 		case "ARCHIVE":
+			params["action"] = "archive"
 			resp = e.Archive(extractArchive(params))
 		case "RESTORE":
+			params["action"] = "restore"
 			resp = e.Restore(extractArchive(params))
 		}
 		if resp != nil && !resp.Success {
