@@ -69,17 +69,11 @@ func TestToolNameStrip(t *testing.T) {
 	}{
 		{"diff_mem_create", "create"},
 		{"diff_mem_append", "append"},
-		{"diff_mem_update_field", "update_field"},
-		{"diff_mem_update_summary", "update_summary"},
-		{"diff_mem_delete", "delete"},
-		{"diff_mem_archive", "archive"},
-		{"diff_mem_restore", "restore"},
-		{"diff_mem_link", "link"},
-		{"diff_mem_unlink", "unlink"},
+		{"diff_mem_update", "update"},
+		{"diff_mem_lifecycle", "lifecycle"},
 		{"diff_mem_list", "list"},
 		{"diff_mem_search", "search"},
 		{"diff_mem_show", "show"},
-		{"diff_mem_deep_load", "deep_load"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.toolName, func(t *testing.T) {
@@ -164,9 +158,8 @@ func TestHandler_ArchiveSuccess(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/arch", "title": "A", "summary": "A", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
-		"path":   "/arch",
-		"reason": "测试归档",
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "archive", "path": "/arch", "reason": "测试归档",
 	})
 	if result.IsError {
 		t.Fatalf("expected archive success, got error: %v", unmarshalResponse(result))
@@ -185,9 +178,8 @@ func TestHandler_ArchiveLinkWarning(t *testing.T) {
 		"path": "/a", "event": "依赖 [[/b]]", "reason": "test",
 	})
 
-	// Archiving /b should succeed but carry a warning (its body is linked by /a)
-	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
-		"path": "/b", "reason": "测试归档被链接节点",
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "archive", "path": "/b", "reason": "测试归档被链接节点",
 	})
 	if result.IsError {
 		t.Fatalf("archive should succeed even when linked: %v", unmarshalResponse(result))
@@ -203,11 +195,11 @@ func TestHandler_RestoreArchived(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/rst", "title": "R", "summary": "R", "reason": "test",
 	})
-	simulateHandler(e, "lifecycle", map[string]interface{}{"action": "archive",
-		"path": "/rst", "reason": "test",
+	simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "archive", "path": "/rst", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "restore",
-		"path": "/rst", "reason": "测试恢复",
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "restore", "path": "/rst", "reason": "测试恢复",
 	})
 	if result.IsError {
 		t.Fatal("expected restore success")
@@ -219,8 +211,8 @@ func TestHandler_RestoreNonArchived(t *testing.T) {
 	simulateHandler(e, "create", map[string]interface{}{
 		"path": "/rst2", "title": "R", "summary": "R", "reason": "test",
 	})
-	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "restore",
-		"path": "/rst2", "reason": "test",
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "restore", "path": "/rst2", "reason": "test",
 	})
 	if !result.IsError {
 		t.Fatal("expected error restoring non-archived node")
@@ -246,13 +238,10 @@ func TestHandler_UnknownTool(t *testing.T) {
 
 func TestHandler_NilArgs(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
-	// Simulates what happens when req.Params.Arguments is nil —
-	// the handler creates an empty map, which should not panic.
 	result, err := simulateHandler(e, "list", make(map[string]interface{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// list with empty path should list root — may succeed or fail depending on state
 	_ = result
 }
 
@@ -264,9 +253,8 @@ func TestHandler_DeleteWithDependency(t *testing.T) {
 		"path": "/a", "event": "依赖 [[/b]] 的产出", "reason": "test",
 	})
 
-	// /b is linked by /a's body; deleting /b should fail
-	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{"action": "delete",
-		"path": "/b", "reason": "test",
+	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
+		"action": "delete", "path": "/b", "reason": "test",
 	})
 	if !result.IsError {
 		t.Fatal("expected delete to fail when linked by other nodes")
@@ -389,129 +377,6 @@ func TestAllToolsMapToEngine(t *testing.T) {
 		resp := e.Dispatch(name, map[string]interface{}{})
 		if resp.Error != nil && resp.Error.Code == "UNKNOWN_TOOL" {
 			t.Errorf("engine does not recognize tool %q", name)
-		}
-	}
-}
-
-// --- MCP name translation tests ---
-// These verify that MCP tool names are correctly translated to engine dispatch names.
-
-func TestTranslateArgs_Create(t *testing.T) {
-	name, _ := translateArgs("create", map[string]interface{}{
-		"path": "/x", "title": "T", "reason": "test",
-	})
-	if name != "create" {
-		t.Fatalf("expected create, got %s", name)
-	}
-}
-
-func TestTranslateArgs_UpdateField(t *testing.T) {
-	name, args := translateArgs("update_field", map[string]interface{}{
-		"path": "/x", "field": "status", "value": "done", "reason": "test",
-	})
-	if name != "update" {
-		t.Fatalf("expected update, got %s", name)
-	}
-	fields, ok := args["fields"].(map[string]interface{})
-	if !ok {
-		t.Fatal("expected fields map")
-	}
-	if fields["status"] != "done" {
-		t.Fatalf("expected fields.status=done, got %v", fields["status"])
-	}
-}
-
-func TestTranslateArgs_UpdateSummary(t *testing.T) {
-	name, args := translateArgs("update_summary", map[string]interface{}{
-		"path": "/x", "old_summary": "old", "new_summary": "new", "reason": "test",
-	})
-	if name != "update" {
-		t.Fatalf("expected update, got %s", name)
-	}
-	summary, ok := args["summary"].(map[string]interface{})
-	if !ok {
-		t.Fatal("expected summary map")
-	}
-	if summary["old"] != "old" || summary["new"] != "new" {
-		t.Fatalf("unexpected summary: %v", summary)
-	}
-}
-
-func TestTranslateArgs_Archive(t *testing.T) {
-	name, args := translateArgs("archive", map[string]interface{}{
-		"path": "/x", "reason": "test",
-	})
-	if name != "lifecycle" || args["action"] != "archive" {
-		t.Fatalf("expected lifecycle+archive, got %s+%v", name, args["action"])
-	}
-}
-
-func TestTranslateArgs_Delete(t *testing.T) {
-	name, args := translateArgs("delete", map[string]interface{}{
-		"path": "/x", "reason": "test",
-	})
-	if name != "lifecycle" || args["action"] != "delete" {
-		t.Fatalf("expected lifecycle+delete, got %s+%v", name, args["action"])
-	}
-}
-
-func TestTranslateArgs_Restore(t *testing.T) {
-	name, args := translateArgs("restore", map[string]interface{}{
-		"path": "/x", "reason": "test",
-	})
-	if name != "lifecycle" || args["action"] != "restore" {
-		t.Fatalf("expected lifecycle+restore, got %s+%v", name, args["action"])
-	}
-}
-
-func TestTranslateArgs_Link(t *testing.T) {
-	name, args := translateArgs("link", map[string]interface{}{
-		"from": "/a", "to": "/b", "type": "depends_on", "reason": "test",
-	})
-	if name != "append" {
-		t.Fatalf("expected append, got %s", name)
-	}
-	if args["path"] != "/a" {
-		t.Fatalf("expected path=/a, got %v", args["path"])
-	}
-	if args["event"] != "[depends_on] [[/b]]" {
-		t.Fatalf("unexpected event: %v", args["event"])
-	}
-}
-
-func TestTranslateArgs_Unlink(t *testing.T) {
-	name, args := translateArgs("unlink", map[string]interface{}{
-		"from": "/a", "to": "/b",
-	})
-	if name != "append" {
-		t.Fatalf("expected append, got %s", name)
-	}
-	if args["path"] != "/a" {
-		t.Fatalf("expected path=/a, got %v", args["path"])
-	}
-}
-
-func TestTranslateArgs_DeepLoad(t *testing.T) {
-	name, args := translateArgs("deep_load", map[string]interface{}{
-		"path": "/x", "window": "last_10",
-	})
-	if name != "show" {
-		t.Fatalf("expected show, got %s", name)
-	}
-	if args["window"] != "last_10" {
-		t.Fatalf("expected window=last_10, got %v", args["window"])
-	}
-}
-
-func TestTranslateArgs_Passthrough(t *testing.T) {
-	for _, tool := range []string{"create", "append", "list", "search", "show"} {
-		args := map[string]interface{}{"path": "/x"}
-		name, translated := translateArgs(tool, args)
-		if name != tool {
-			t.Errorf("expected %q passthrough, got %q", tool, name)
-		}
-		if translated["path"] != "/x" {
-			t.Errorf("expected path=/x for %s, got %v", tool, translated["path"])
 		}
 	}
 }

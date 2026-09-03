@@ -105,7 +105,7 @@ internal/
   agent/         Agent 核心 + REPL
   api/           HTTP 路由
   engine/        引擎（调度 + 读写 + 生命周期 + 图操作）
-  mcp/           MCP 协议层（14 个工具）
+  mcp/           MCP 协议层（7 个工具）
   model/         数据模型
   store/         存储层（内存 + BadgerDB）
   validator/     语义验证
@@ -121,23 +121,17 @@ docs/            设计规范文档
 
 ## 工具列表
 
-MCP 暴露 13 个工具：
+MCP 暴露 7 个工具，与引擎 dispatch 名一一对应：
 
 | 工具 | 说明 |
 |------|------|
-| `diff_mem_create` | 创建新节点，引擎自动创建缺失父路径 |
-| `diff_mem_append` | 向节点追加事件（仅记录新事实） |
-| `diff_mem_update_field` | 更新 Header 字段 |
-| `diff_mem_update_summary` | 刷新摘要，含实体漂移检测 |
-| `diff_mem_delete` | 永久删除（有活跃依赖时拒绝） |
-| `diff_mem_archive` | 归档（冻结，可恢复） |
-| `diff_mem_restore` | 恢复已归档节点 |
-| `diff_mem_link` | 建立引用关系 |
-| `diff_mem_unlink` | 解除引用关系 |
-| `diff_mem_list` | 列出子节点 |
-| `diff_mem_search` | 搜索（tags 精确 / keywords 模糊） |
-| `diff_mem_show` | 查看节点 Header |
-| `diff_mem_deep_load` | 加载 Body 事件流 |
+| `diff_mem_create` | 创建新节点，引擎自动创建缺失父路径。Body 事件中可用 [[/path]] 链接其他记忆 |
+| `diff_mem_append` | 向节点追加事件（仅记录新事实）。事件中可用 [[/path]] 链接其他记忆 |
+| `diff_mem_update` | 更新节点 Header。fields 传 {字段: 值} 批量改字段；summary 传 {old, new, reason} 刷新摘要。两者可同时提交 |
+| `diff_mem_lifecycle` | 节点生命周期状态转换。action: delete / archive / restore |
+| `diff_mem_list` | 列出指定路径下的直接子节点。path 为空或 / 时列出根层级 |
+| `diff_mem_search` | 搜索节点。支持 tags 精确匹配和 keywords 模糊匹配 |
+| `diff_mem_show` | 查看节点。不传 window 返回 Header + 内容链接与反向链接；传 window 附带 Body 事件流 |
 
 `diff_mem_exec`（原子事务）仅通过 HTTP `/tools/exec` 暴露，不占 MCP 工具位。
 
