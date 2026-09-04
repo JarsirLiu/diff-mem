@@ -25,6 +25,7 @@
 | [06-retrieval-flow.md](./06-retrieval-flow.md) | 检索完整链路：list 导航 + search 索引 + show(window) |
 | [07-node-lifecycle.md](./07-node-lifecycle.md) | 节点生命周期：active/archived 二态，内容链接，归档与恢复 |
 | [08-content-links.md](./08-content-links.md) | 内容链接：`[[/path]]` 语法、写侧门禁、读侧发现（links/backlinks）、生命周期门禁 |
+| [09-deployment.md](./09-deployment.md) | 部署与跨平台使用：交叉编译、Windows/Linux/macOS 运行方案、客户端接入、安全注意事项 |
 
 ---
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,7 +21,8 @@ import (
 func main() {
 	port := flag.Int("port", 8787, "SSE listen port (0 to disable SSE)")
 	host := flag.String("host", "0.0.0.0", "SSE listen host")
-	dataDir := flag.String("data", "./diff-mem-data", "BadgerDB storage directory")
+	dataDir := flag.String("data", "./diff-mem-data", "storage directory")
+	storeKind := flag.String("store", "badger", "storage backend: badger | sqlite | memory")
 	stdio := flag.Bool("stdio", false, "Use stdio transport (for local MCP clients like Claude Desktop)")
 	flag.Parse()
 
@@ -28,11 +30,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := store.NewFileStore(*dataDir)
+	var s store.Store
+	var err error
+	switch *storeKind {
+	case "sqlite":
+		s, err = store.NewSQLiteStore(filepath.Join(*dataDir, "diff-mem.db"))
+	case "memory":
+		s = store.NewMemoryStore()
+	case "badger":
+		s, err = store.NewFileStore(*dataDir)
+	default:
+		log.Fatalf("unknown store backend %q: use badger | sqlite | memory", *storeKind)
+	}
 	if err != nil {
 		log.Fatal("failed to open store: ", err)
 	}
-	defer s.Close()
+	if closer, ok := s.(interface{ Close() error }); ok {
+		defer closer.Close()
+	}
 
 	e := engine.New(s)
 	ctx, cancel := context.WithCancel(context.Background())
