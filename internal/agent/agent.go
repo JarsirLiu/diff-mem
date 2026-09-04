@@ -48,23 +48,25 @@ type EventSummary struct {
 
 // AgentStatus holds the current agent state.
 type AgentStatus struct {
-	SessionPath     string
-	ProfilePath     string
-	ServerURL       string
-	SessionExists   bool
-	ProfileExists   bool
+	SessionPath      string
+	ProfilePath      string
+	ServerURL        string
+	SessionExists    bool
+	ProfileExists    bool
 	InteractionCount int
-	LastInteraction *string
+	LastInteraction  *string
 }
 
 // New creates a new Agent.
 func New(baseURL string) *Agent {
 	today := time.Now().Format("2006-01-02")
 	return &Agent{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client:  &http.Client{Timeout: 30 * time.Second},
 		baseURL: strings.TrimRight(baseURL, "/"),
-		sessionPath: fmt.Sprintf("/agent/session-%s", today),
-		profilePath: "/agent/profile",
+		// Session notes are ephemeral → short-term; the profile is durable
+		// knowledge → long-term (two-root memory structure, docs/02 §四).
+		sessionPath: fmt.Sprintf("/short-term/agent/session-%s", today),
+		profilePath: "/long-term/agent/profile",
 	}
 }
 
@@ -159,8 +161,8 @@ func (a *Agent) Store(ctx context.Context, memory string, reason string) error {
 		reason = "agent 自动记录"
 	}
 	resp, err := a.callTool(ctx, "append", map[string]interface{}{
-		"path":  a.sessionPath,
-		"event": memory,
+		"path":   a.sessionPath,
+		"event":  memory,
 		"reason": reason,
 	})
 	if err != nil {

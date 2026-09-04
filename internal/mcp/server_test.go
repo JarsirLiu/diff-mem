@@ -88,7 +88,7 @@ func TestToolNameStrip(t *testing.T) {
 func TestHandler_CreateSuccess(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	result, err := simulateHandler(e, "create", map[string]interface{}{
-		"path":    "/projects/test",
+		"path":    "/long-term/projects/test",
 		"title":   "Test Project",
 		"summary": "A test project node",
 		"tags":    []interface{}{"project", "test"},
@@ -115,10 +115,10 @@ func TestHandler_CreateSuccess(t *testing.T) {
 func TestHandler_CreateDuplicate(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/dup", "title": "D", "summary": "D", "reason": "test",
+		"path": "/long-term/dup", "title": "D", "summary": "D", "reason": "test",
 	})
 	result, _ := simulateHandler(e, "create", map[string]interface{}{
-		"path": "/dup", "title": "D", "summary": "D", "reason": "test",
+		"path": "/long-term/dup", "title": "D", "summary": "D", "reason": "test",
 	})
 	if !result.IsError {
 		t.Fatal("expected error for duplicate create")
@@ -156,10 +156,10 @@ func TestHandler_ShowNotFound(t *testing.T) {
 func TestHandler_ArchiveSuccess(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/arch", "title": "A", "summary": "A", "reason": "test",
+		"path": "/long-term/arch", "title": "A", "summary": "A", "reason": "test",
 	})
 	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "archive", "path": "/arch", "reason": "测试归档",
+		"action": "archive", "path": "/long-term/arch", "reason": "测试归档",
 	})
 	if result.IsError {
 		t.Fatalf("expected archive success, got error: %v", unmarshalResponse(result))
@@ -172,14 +172,14 @@ func TestHandler_ArchiveSuccess(t *testing.T) {
 
 func TestHandler_ArchiveLinkWarning(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
-	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
-	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
+	simulateHandler(e, "create", map[string]interface{}{"path": "/long-term/a", "title": "A", "summary": "A", "reason": "test"})
+	simulateHandler(e, "create", map[string]interface{}{"path": "/long-term/b", "title": "B", "summary": "B", "reason": "test"})
 	simulateHandler(e, "append", map[string]interface{}{
-		"path": "/a", "event": "依赖 [[/b]]", "reason": "test",
+		"path": "/long-term/a", "event": "依赖 [[/long-term/b]]", "reason": "test",
 	})
 
 	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "archive", "path": "/b", "reason": "测试归档被链接节点",
+		"action": "archive", "path": "/long-term/b", "reason": "测试归档被链接节点",
 	})
 	if result.IsError {
 		t.Fatalf("archive should succeed even when linked: %v", unmarshalResponse(result))
@@ -193,13 +193,13 @@ func TestHandler_ArchiveLinkWarning(t *testing.T) {
 func TestHandler_RestoreArchived(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/rst", "title": "R", "summary": "R", "reason": "test",
+		"path": "/long-term/rst", "title": "R", "summary": "R", "reason": "test",
 	})
 	simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "archive", "path": "/rst", "reason": "test",
+		"action": "archive", "path": "/long-term/rst", "reason": "test",
 	})
 	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "restore", "path": "/rst", "reason": "测试恢复",
+		"action": "restore", "path": "/long-term/rst", "reason": "测试恢复",
 	})
 	if result.IsError {
 		t.Fatal("expected restore success")
@@ -209,10 +209,10 @@ func TestHandler_RestoreArchived(t *testing.T) {
 func TestHandler_RestoreNonArchived(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/rst2", "title": "R", "summary": "R", "reason": "test",
+		"path": "/long-term/rst2", "title": "R", "summary": "R", "reason": "test",
 	})
 	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "restore", "path": "/rst2", "reason": "test",
+		"action": "restore", "path": "/long-term/rst2", "reason": "test",
 	})
 	if !result.IsError {
 		t.Fatal("expected error restoring non-archived node")
@@ -247,14 +247,14 @@ func TestHandler_NilArgs(t *testing.T) {
 
 func TestHandler_DeleteWithDependency(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
-	simulateHandler(e, "create", map[string]interface{}{"path": "/a", "title": "A", "summary": "A", "reason": "test"})
-	simulateHandler(e, "create", map[string]interface{}{"path": "/b", "title": "B", "summary": "B", "reason": "test"})
+	simulateHandler(e, "create", map[string]interface{}{"path": "/long-term/a", "title": "A", "summary": "A", "reason": "test"})
+	simulateHandler(e, "create", map[string]interface{}{"path": "/long-term/b", "title": "B", "summary": "B", "reason": "test"})
 	simulateHandler(e, "append", map[string]interface{}{
-		"path": "/a", "event": "依赖 [[/b]] 的产出", "reason": "test",
+		"path": "/long-term/a", "event": "依赖 [[/long-term/b]] 的产出", "reason": "test",
 	})
 
 	result, _ := simulateHandler(e, "lifecycle", map[string]interface{}{
-		"action": "delete", "path": "/b", "reason": "test",
+		"action": "delete", "path": "/long-term/b", "reason": "test",
 	})
 	if !result.IsError {
 		t.Fatal("expected delete to fail when linked by other nodes")
@@ -264,11 +264,11 @@ func TestHandler_DeleteWithDependency(t *testing.T) {
 func TestHandler_SearchTag(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/p1", "title": "P1", "summary": "P1",
+		"path": "/long-term/p1", "title": "P1", "summary": "P1",
 		"tags": []interface{}{"project", "backend"}, "reason": "test",
 	})
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/p2", "title": "P2", "summary": "P2",
+		"path": "/long-term/p2", "title": "P2", "summary": "P2",
 		"tags": []interface{}{"project", "frontend"}, "reason": "test",
 	})
 
@@ -283,7 +283,7 @@ func TestHandler_SearchTag(t *testing.T) {
 func TestHandler_SearchKeyword(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/proj/backend", "title": "Backend", "summary": "后端开发", "reason": "test",
+		"path": "/long-term/proj/backend", "title": "Backend", "summary": "后端开发", "reason": "test",
 	})
 
 	result, _ := simulateHandler(e, "search", map[string]interface{}{
@@ -297,18 +297,18 @@ func TestHandler_SearchKeyword(t *testing.T) {
 func TestHandler_DeepLoad(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/tasks/t1", "title": "T1", "summary": "T1", "reason": "test",
+		"path": "/short-term/tasks/t1", "title": "T1", "summary": "T1", "reason": "test",
 	})
 	for i := 0; i < 5; i++ {
 		simulateHandler(e, "append", map[string]interface{}{
-			"path": "/tasks/t1", "event": "evt" + string(rune(i+48)), "reason": "test",
+			"path": "/short-term/tasks/t1", "event": "evt" + string(rune(i+48)), "reason": "test",
 		})
 	}
 
 	windows := []string{"recent", "last_10", "last_50", "last_100", "all"}
 	for _, w := range windows {
 		result, _ := simulateHandler(e, "show", map[string]interface{}{
-			"path": "/tasks/t1", "window": w,
+			"path": "/short-term/tasks/t1", "window": w,
 		})
 		if result.IsError {
 			t.Fatalf("deep_load window %q failed: %v", w, unmarshalResponse(result))
@@ -319,7 +319,7 @@ func TestHandler_DeepLoad(t *testing.T) {
 func TestHandler_DeepLoadInvalidWindow(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	result, _ := simulateHandler(e, "show", map[string]interface{}{
-		"path": "/x", "window": "invalid",
+		"path": "/long-term/x", "window": "invalid",
 	})
 	if !result.IsError {
 		t.Fatal("expected error for invalid window")
@@ -329,11 +329,11 @@ func TestHandler_DeepLoadInvalidWindow(t *testing.T) {
 func TestHandler_SummaryDriftLazyReason(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/drift", "title": "D", "summary": "张三负责后端，deadline 2026-09-30", "reason": "test",
+		"path": "/long-term/drift", "title": "D", "summary": "张三负责后端，deadline 2026-09-30", "reason": "test",
 	})
 
 	result, _ := simulateHandler(e, "update", map[string]interface{}{
-		"path": "/drift",
+		"path": "/long-term/drift",
 		"summary": map[string]interface{}{
 			"old": "张三负责后端，deadline 2026-09-30", "new": "项目进行中", "reason": "ok",
 		},
@@ -352,11 +352,11 @@ func TestHandler_SummaryDriftLazyReason(t *testing.T) {
 func TestHandler_SummaryDriftSubstantiveReason(t *testing.T) {
 	e := engine.New(store.NewMemoryStore())
 	simulateHandler(e, "create", map[string]interface{}{
-		"path": "/drift2", "title": "D", "summary": "张三负责后端", "reason": "test",
+		"path": "/long-term/drift2", "title": "D", "summary": "张三负责后端", "reason": "test",
 	})
 
 	result, _ := simulateHandler(e, "update", map[string]interface{}{
-		"path": "/drift2",
+		"path": "/long-term/drift2",
 		"summary": map[string]interface{}{
 			"old": "张三负责后端", "new": "李四接替负责",
 			"reason": "张三离职，李四接替负责后端开发工作",

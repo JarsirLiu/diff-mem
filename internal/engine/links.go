@@ -72,7 +72,7 @@ func (e *Engine) validateContentLinks(self string, contents ...string) *model.To
 					"content link [["+target+"]] must be a memory path starting with /",
 					"内容链接格式：[[/path/to/node]]")
 			}
-			if isSelfOrAncestor(target, self) || e.store.Exists(target) {
+			if isSelfOrAncestor(target, self) || e.store.Exists(target) || e.isVirtualDir(target) {
 				continue
 			}
 			return fail("LINK_TARGET_NOT_FOUND",
@@ -81,6 +81,19 @@ func (e *Engine) validateContentLinks(self string, contents ...string) *model.To
 		}
 	}
 	return nil
+}
+
+// isVirtualDir reports whether path is a directory that contains at least one
+// node without being a node itself (pure prefix addressing — intermediate
+// paths need no physical node).
+func (e *Engine) isVirtualDir(path string) bool {
+	prefix := strings.TrimSuffix(path, "/") + "/"
+	for _, n := range e.store.AllNodes() {
+		if strings.HasPrefix(n.Header.Path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // didYouMean suggests existing nodes similar to the given path (up to 3 hits,
@@ -122,6 +135,14 @@ func newLinkIndex() *linkIndex {
 		outbound: make(map[string]map[string]bool),
 		inbound:  make(map[string]map[string]bool),
 	}
+}
+
+// reset clears all index state (used by transaction rollback).
+func (idx *linkIndex) reset() {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.outbound = make(map[string]map[string]bool)
+	idx.inbound = make(map[string]map[string]bool)
 }
 
 // addLinks registers all links of a node. Idempotent: safe to call again

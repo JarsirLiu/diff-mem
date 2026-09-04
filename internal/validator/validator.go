@@ -10,11 +10,24 @@ import (
 )
 
 var (
-	// pathRe validates the normalized path format.
-	pathRe = regexp.MustCompile(`^/[a-z0-9_\-/[:alpha:]]+$`)
 	// fieldRe validates field names.
 	fieldRe = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
+
+// protectedFields must never be written via the generic fields mechanism:
+// status has its own lifecycle tool, summary has dedicated drift-checked
+// update semantics (docs/04-state-drift-defense.md).
+var protectedFields = map[string]bool{
+	"status":  true,
+	"summary": true,
+}
+
+// memoryRoots are the two enforced top-level memory areas (docs/02 §四):
+// short-term for recent events, long-term for durable knowledge.
+var memoryRoots = map[string]bool{
+	"short-term": true,
+	"long-term":  true,
+}
 
 // ValidatePath checks path format rules.
 func ValidatePath(path string) string {
@@ -31,8 +44,17 @@ func ValidatePath(path string) string {
 		return "path must not contain empty segments"
 	}
 	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(segments) > 5 {
-		return "path must not exceed 5 levels"
+	// 5 usable levels below the mandatory memory root.
+	if len(segments) > 6 {
+		return "path must not exceed 5 levels below the memory root"
+	}
+	// Two-root structure: every path lives under short-term or long-term,
+	// and the roots themselves are directories, not nodes.
+	if !memoryRoots[segments[0]] {
+		return "path must start with /short-term or /long-term, got /" + segments[0]
+	}
+	if len(segments) < 2 {
+		return "path must have at least one level below /" + segments[0]
 	}
 	for _, seg := range segments {
 		if len(seg) > 100 {
@@ -97,6 +119,9 @@ func ValidateUpdateField(opts model.UpdateFieldOptions) string {
 	}
 	if !fieldRe.MatchString(opts.Field) {
 		return "field must contain only a-z, 0-9, underscore"
+	}
+	if protectedFields[opts.Field] {
+		return "field \"" + opts.Field + "\" is protected: use diff_mem_lifecycle for status or diff_mem_update summary for summary"
 	}
 	if len(opts.Value) > 5000 {
 		return "value must not exceed 5000 characters"

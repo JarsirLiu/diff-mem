@@ -232,7 +232,7 @@ func TestCallTool_Error(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err := a.callTool(ctx, "show", map[string]interface{}{"path": "/x"})
+	_, err := a.callTool(ctx, "show", map[string]interface{}{"path": "/long-term/x"})
 	if err == nil {
 		t.Fatal("expected error when server is unreachable")
 	}
@@ -501,7 +501,7 @@ func TestCallTool_BadParams(t *testing.T) {
 
 	// Send malformed params that should trigger VALIDATION_FAILED
 	resp, err := a.callTool(ctx, "create", map[string]interface{}{
-		"path": "/bad path!", "title": "T", "summary": "S", "reason": "test",
+		"path": "no-leading-slash", "title": "T", "summary": "S", "reason": "test",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -516,10 +516,10 @@ func TestNew_Defaults(t *testing.T) {
 	if a.baseURL != DefaultServerURL {
 		t.Fatalf("expected baseURL %s, got %s", DefaultServerURL, a.baseURL)
 	}
-	if !strings.HasPrefix(a.sessionPath, "/agent/session-") {
+	if !strings.HasPrefix(a.sessionPath, "/short-term/agent/session-") {
 		t.Fatalf("unexpected session path: %s", a.sessionPath)
 	}
-	if a.profilePath != "/agent/profile" {
+	if a.profilePath != "/long-term/agent/profile" {
 		t.Fatalf("unexpected profile path: %s", a.profilePath)
 	}
 	if a.client == nil {

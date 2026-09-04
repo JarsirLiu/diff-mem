@@ -2,6 +2,9 @@
 package engine
 
 import (
+	"encoding/json"
+	"strconv"
+
 	"github.com/diff-mem/diff-mem/internal/model"
 	"github.com/diff-mem/diff-mem/internal/store"
 )
@@ -17,6 +20,11 @@ func New(s store.Store) *Engine {
 		e.links.addLinks(node.Header.Path, nodeContentLinks(node))
 	}
 	return e
+}
+
+// AllNodesCount exposes the stored node count for tests and diagnostics.
+func (e *Engine) AllNodesCount() []*model.Node {
+	return e.store.AllNodes()
 }
 
 // Dispatch routes a tool name + params to the appropriate handler.
@@ -44,23 +52,24 @@ func (e *Engine) Dispatch(name string, params map[string]interface{}) *model.Too
 	case "list":
 		path, _ := params["path"].(string)
 		inc, _ := params["include_archived"].(bool)
-		return e.List(path, inc)
+		return e.List(NormalizePath(path), inc)
 	case "search":
 		return e.Search(extractSearch(params))
 	case "show":
 		path, _ := params["path"].(string)
 		window, _ := params["window"].(string)
 		if window == "" {
-			return e.Show(path)
+			return e.Show(NormalizePath(path))
 		}
-		return e.DeepLoad(path, window)
+		return e.DeepLoad(NormalizePath(path), window)
 	default:
 		return fail("UNKNOWN_TOOL", "unknown tool: "+name)
 	}
 }
 
 // Exec atomically executes multiple memory operations.
-// All operations succeed or all rollback.
+// All operations succeed or all rollback: a full-state snapshot is taken
+// before execution and restored if any operation fails.
 func (e *Engine) Exec(operations []map[string]interface{}) *model.ToolResponse {
 	if len(operations) == 0 || len(operations) > 20 {
 		return fail("VALIDATION_FAILED", "operations must be 1-20 items")
@@ -68,12 +77,20 @@ func (e *Engine) Exec(operations []map[string]interface{}) *model.ToolResponse {
 	for i, op := range operations {
 		opName, ok := op["op"].(string)
 		if !ok {
-			return fail("VALIDATION_FAILED", "operation ["+idx(i)+"] op must be string")
+			return fail("VALIDATION_FAILED", "operation ["+strconv.Itoa(i)+"] op must be string")
 		}
 		switch opName {
 		case "SHOW", "LIST", "SEARCH", "DEEP_LOAD":
 			return fail("VALIDATION_FAILED", "read operation "+opName+" not allowed in transaction")
 		}
+	}
+
+	// Snapshot full engine state for rollback. Bounded by the 20-op limit and
+	// the memory-tree data scale (agent memory, not big data), a full snapshot
+	// is simple and correct.
+	snap, err := e.snapshot()
+	if err != nil {
+		return fail("TRANSACTION_FAILED", "snapshot before transaction failed: "+err.Error())
 	}
 
 	for i, op := range operations {
@@ -112,13 +129,66 @@ func (e *Engine) Exec(operations []map[string]interface{}) *model.ToolResponse {
 			resp = e.Restore(extractArchive(params))
 		}
 		if resp != nil && !resp.Success {
-			return fail("TRANSACTION_FAILED", "operation ["+idx(i)+"] failed: "+resp.Error.Message)
+			e.restore(snap)
+			return fail("TRANSACTION_FAILED",
+				"operation ["+strconv.Itoa(i)+"] failed: "+resp.Error.Message+"; transaction rolled back")
 		}
 	}
 
-	return success(map[string]string{"committed": "true", "operations": idx(len(operations))})
+	return success(map[string]string{"committed": "true", "operations": strconv.Itoa(len(operations))})
 }
 
-func idx(i int) string {
-	return string(rune(i + 48))
+// engineSnapshot is a deep copy of all nodes, taken before a transaction.
+type engineSnapshot struct {
+	nodes []*model.Node
+}
+
+func cloneNode(n *model.Node) (*model.Node, error) {
+	b, err := json.Marshal(n)
+	if err != nil {
+		return nil, err
+	}
+	var c model.Node
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (e *Engine) snapshot() (*engineSnapshot, error) {
+	nodes := e.store.AllNodes()
+	snap := make([]*model.Node, 0, len(nodes))
+	for _, n := range nodes {
+		c, err := cloneNode(n)
+		if err != nil {
+			return nil, err
+		}
+		snap = append(snap, c)
+	}
+	return &engineSnapshot{nodes: snap}, nil
+}
+
+// restore puts the store and the link index back to the snapshot state.
+func (e *Engine) restore(s *engineSnapshot) {
+	keep := make(map[string]bool, len(s.nodes))
+	for _, n := range s.nodes {
+		keep[n.Header.Path] = true
+	}
+	for _, n := range e.store.AllNodes() {
+		if !keep[n.Header.Path] {
+			e.store.DeleteNode(n.Header.Path)
+		}
+	}
+	for _, n := range s.nodes {
+		c, err := cloneNode(n)
+		if err != nil {
+			continue
+		}
+		e.store.PutNode(c)
+	}
+	// Rebuild the in-memory link index from the restored state.
+	e.links.reset()
+	for _, n := range s.nodes {
+		e.links.addLinks(n.Header.Path, nodeContentLinks(n))
+	}
 }

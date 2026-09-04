@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -83,6 +84,27 @@ func main() {
 		fmt.Fprint(w, `{"status":"ok"}`)
 	})
 
+	// ReadHeaderTimeout only: SSE is a long-lived response stream, so a global
+	// WriteTimeout would kill open sessions.
+	httpSrv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	// Graceful shutdown: the signal goroutine cancels ctx; ListenAndServe
+	// returns when Shutdown completes instead of hanging on SIGTERM.
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown error: %v", err)
+		}
+	}()
+
 	log.Printf("diff-mem MCP SSE server at http://%s/mcp\n", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal("MCP server error: ", err)
+	}
 }

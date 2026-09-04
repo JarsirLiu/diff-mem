@@ -54,7 +54,8 @@ func (s *FileStore) deleteNode(path string) error {
 	})
 }
 
-// Store interface
+// Store interface — UpdatedAt is stamped by the caller (engine), keeping all
+// three store implementations on the same contract.
 func (s *FileStore) GetNode(path string) (*model.Node, bool) {
 	return s.loadNode(path)
 }
@@ -157,17 +158,22 @@ func (s *FileStore) Close() error {
 	return s.db.Close()
 }
 
+// tokenize splits fields into indexable words on common ASCII and CJK
+// delimiters. Single implementation shared by all store backends so keyword
+// search behaves identically regardless of backend.
 func tokenize(fields ...string) []string {
 	var words []string
 	for _, f := range fields {
 		word := ""
 		for _, r := range []rune(f) {
-			if r == '/' || r == '-' || r == '_' || r == ' ' || r == '\n' || r == ',' {
+			switch r {
+			case '/', '-', '_', ' ', '\t', '\n', '\r', ',',
+				'，', '、', '；', '：', '.', '。', '·', '（', '）', '(', ')':
 				if word != "" {
 					words = append(words, word)
 					word = ""
 				}
-			} else {
+			default:
 				word += string(r)
 			}
 		}

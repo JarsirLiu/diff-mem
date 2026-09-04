@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -65,7 +64,8 @@ func (s *SQLiteStore) PutNode(node *model.Node) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	node.Header.UpdatedAt = time.Now()
+	// UpdatedAt is stamped by the caller (engine), not the store,
+	// so read paths can persist LastAccessed without bumping it.
 	data, err := json.Marshal(node)
 	if err != nil {
 		return err

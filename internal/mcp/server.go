@@ -22,6 +22,13 @@ const serverInstructions = `
 你正在管理用户的长期记忆系统（Diff-Mem）。你的职责是选择性地把有价值的信息写入记忆树，
 而不是记录所有对话内容。以下是你必须遵守的记录规则。
 
+【记忆分区】记忆树只有两个根目录：
+- /short-term/…：短期记忆。记录近期事件、当前任务状态、临时上下文。默认写入这里。
+- /long-term/…：长期记忆。只放经过沉淀、长期有价值的内容：用户偏好、项目结构、决策结论、人物关系。
+- 判断规则：先写 /short-term；当你认为某条记忆 3 个月后仍有价值（或被反复检索到），
+  用 create 在 /long-term 建立沉淀节点，并归档（action=archive）短期原件。
+- 不要在 /long-term 记录流水账；不要让 /short-term 里的内容无限堆积。
+
 【该记的】
 - 用户说出的长期习惯、工作方式、偏好（例如"我每天早上喝咖啡""我习惯用 git 管理代码"）
 - 具体事实：项目进度、决策结论、截止日期、人物关系、组织架构
@@ -37,7 +44,7 @@ const serverInstructions = `
 - 临时状态（"现在在吃饭""刚到家""在等车"）——除非是长期行为模式的一部分
 
 【判断原则】
-1. 3 个月后这条信息还有价值吗？没有就不记。
+1. 3 个月后这条信息还有价值吗？没有就写 /short-term，有价值才考虑 /long-term。
 2. 能清楚说出"谁在什么时候做了什么/说了什么"吗？说不清楚就别记。
 3. 同一条信息已经记过了吗？记过了就别重复记，需要更新就用 update。
 4. 每次追加事件时，reason 字段必须说明"为什么值得记"——写不出 reason 就说明不该记。
@@ -61,7 +68,7 @@ func New(e *engine.Engine) *Server {
 func (s *Server) registerTools() {
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_create",
-		Description: "在记忆树中创建新节点。path 由你决定，引擎自动创建缺失的父路径。Body 事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在。",
+		Description: "在记忆树中创建新节点。path 必须以 /short-term（短期）或 /long-term（长期）开头；中间目录无需预先创建。Body 事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在（或是指向现有节点的目录路径）。",
 		InputSchema: toolSchemas["create"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{

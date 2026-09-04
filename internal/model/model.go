@@ -29,11 +29,11 @@ type Header struct {
 
 // Event is an immutable record appended to a node's body.
 type Event struct {
-	ID      string            `json:"id"`
-	Type    string            `json:"type"` // "user", "system", "field_change", "summary_update", "archived", "restored"
-	Content string            `json:"content"`
-	Meta    map[string]string `json:"meta,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
+	ID        string            `json:"id"`
+	Type      string            `json:"type"` // "user", "system", "field_change", "summary_update", "archived", "restored"
+	Content   string            `json:"content"`
+	Meta      map[string]string `json:"meta,omitempty"`
+	Timestamp time.Time         `json:"timestamp"`
 }
 
 // Node is the complete memory entity — path + header + event stream.
@@ -44,7 +44,7 @@ type Node struct {
 
 // ToolRequest is the shape of an incoming tool call.
 type ToolRequest struct {
-	ToolName string `json:"tool"`
+	ToolName string                 `json:"tool"`
 	Params   map[string]interface{} `json:"params"`
 }
 
@@ -82,10 +82,10 @@ type ShowResult struct {
 
 // DeepLoadResult is the response from deep loading a node's body.
 type DeepLoadResult struct {
-	Path    string  `json:"path"`
-	Events  []Event `json:"events"`
-	Total   int     `json:"total"`
-	HasMore bool    `json:"has_more"`
+	Path    string   `json:"path"`
+	Events  []Event  `json:"events"`
+	Total   int      `json:"total"`
+	HasMore bool     `json:"has_more"`
 	Links   []string `json:"links,omitempty"`
 }
 
@@ -99,20 +99,20 @@ type SearchOptions struct {
 
 // CreateOptions holds parameters for node creation.
 type CreateOptions struct {
-	Path         string
-	Title        string
-	Summary      string
-	Tags         []string
+	Path          string
+	Title         string
+	Summary       string
+	Tags          []string
 	InitialEvents []string
-	Reason       string
+	Reason        string
 }
 
 // UpdateSummaryOptions holds parameters for summary updates.
 type UpdateSummaryOptions struct {
-	Path        string
-	OldSummary  string
-	NewSummary  string
-	Reason      string
+	Path       string
+	OldSummary string
+	NewSummary string
+	Reason     string
 }
 
 // ArchiveOptions holds parameters for archive/restore.
@@ -142,7 +142,7 @@ type UpdateOptions struct {
 
 // AppendOptions holds parameters for appending events.
 type AppendOptions struct {
-	Path  string
-	Event string
+	Path   string
+	Event  string
 	Reason string
 }

@@ -3,7 +3,6 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/diff-mem/diff-mem/internal/engine"
@@ -71,11 +70,7 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.WriteHeader(status)
 	resp := model.ToolResponse{
 		Success: false,
-		Error: &model.ErrorInfo{Code: code, Message: message},
+		Error:   &model.ErrorInfo{Code: code, Message: message},
 	}
 	json.NewEncoder(w).Encode(resp)
-}
-
-func init() {
-	_ = log.Println // keep log imported
 }

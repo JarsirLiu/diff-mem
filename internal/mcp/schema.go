@@ -11,7 +11,7 @@ const (
 	  "properties": {
 	    "path": {
 	      "type": "string",
-	      "description": "新节点的完整路径，如 /Projects/Alpha/Backend。引擎自动创建缺失的父路径并做规范化（转小写、去特殊字符）。"
+	      "description": "新节点的完整路径，必须以 /short-term（短期记忆）或 /long-term（长期记忆）开头，如 /long-term/projects/alpha。中间目录无需预先创建；引擎会做规范化（转小写、去特殊字符）。"
 	    },
 	    "title": {
 	      "type": "string",
@@ -127,7 +127,7 @@ const (
 	  "properties": {
 	    "path": {
 	      "type": "string",
-	      "description": "要列出的路径。空字符串或 / 表示根层级。每次只返回一层，不会递归展开。子节点超过 50 个时自动按前缀聚合分组并置 has_more=true。"
+	      "description": "要列出的路径。空字符串或 / 列出根层级（short-term 与 long-term 两个记忆区）。目录无需真实存在，按前缀聚合返回。每次只返回一层，不会递归展开。子节点超过 50 个时自动按前缀分组并置 has_more=true。"
 	    },
 	    "include_archived": {
 	      "type": "boolean",

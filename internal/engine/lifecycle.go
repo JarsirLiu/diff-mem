@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/diff-mem/diff-mem/internal/model"
 	"github.com/diff-mem/diff-mem/internal/validator"
+	"github.com/google/uuid"
 )
 
 func (e *Engine) Delete(opts model.ArchiveOptions) *model.ToolResponse {
@@ -17,16 +17,41 @@ func (e *Engine) Delete(opts model.ArchiveOptions) *model.ToolResponse {
 	if !e.store.Exists(opts.Path) {
 		return fail("PATH_NOT_FOUND", "path not found: "+opts.Path)
 	}
-	// Gate: other active nodes' bodies link here — deleting would leave dangling links.
-	referrers := e.findReferrers(opts.Path, opts.Path)
+	// Cascade: the node and all its descendants are removed (docs/01 §3.4).
+	prefix := opts.Path + "/"
+	victims := []string{opts.Path}
+	for _, n := range e.store.AllNodes() {
+		if strings.HasPrefix(n.Header.Path, prefix) {
+			victims = append(victims, n.Header.Path)
+		}
+	}
+	// Gate: active nodes OUTSIDE the victim set linking to any victim would
+	// leave dangling links — reject and point at the referrers.
+	victimSet := make(map[string]bool, len(victims))
+	for _, v := range victims {
+		victimSet[v] = true
+	}
+	var referrers []string
+	seenRef := make(map[string]bool)
+	for _, v := range victims {
+		for _, r := range e.findReferrers(v, v) {
+			if victimSet[r] || seenRef[r] {
+				continue
+			}
+			seenRef[r] = true
+			referrers = append(referrers, r)
+		}
+	}
 	if len(referrers) > 0 {
 		return fail("LINKED_BY_OTHERS",
 			"node body is linked by active nodes: "+strings.Join(referrers, ", "),
 			"先更新这些节点的 Body，移除或修正 [[链接]] 后再删除")
 	}
-	e.store.DeleteNode(opts.Path)
-	e.links.removeNode(opts.Path)
-	return success(map[string]string{"deleted": opts.Path, "reason": opts.Reason})
+	for _, v := range victims {
+		e.store.DeleteNode(v)
+		e.links.removeNode(v)
+	}
+	return success(map[string]interface{}{"deleted": opts.Path, "removed": victims, "reason": opts.Reason})
 }
 
 func (e *Engine) Archive(opts model.ArchiveOptions) *model.ToolResponse {
@@ -46,7 +71,7 @@ func (e *Engine) Archive(opts model.ArchiveOptions) *model.ToolResponse {
 	node.Events = append(node.Events, model.Event{
 		ID: uuid.NewString(), Type: "archived",
 		Content: "node archived",
-		Meta: map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
+		Meta:    map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
 	})
 	node.Header.EventCount = len(node.Events)
 	e.store.PutNode(node)
@@ -80,7 +105,7 @@ func (e *Engine) Restore(opts model.ArchiveOptions) *model.ToolResponse {
 	node.Events = append(node.Events, model.Event{
 		ID: uuid.NewString(), Type: "restored",
 		Content: "node restored",
-		Meta: map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
+		Meta:    map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
 	})
 	node.Header.EventCount = len(node.Events)
 	e.store.PutNode(node)

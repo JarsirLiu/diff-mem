@@ -1,9 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/diff-mem/diff-mem/internal/api"
 	"github.com/diff-mem/diff-mem/internal/engine"
@@ -20,7 +26,7 @@ func main() {
 	var err error
 	switch *storeKind {
 	case "sqlite":
-		s, err = store.NewSQLiteStore(*dataDir + "/diff-mem.db")
+		s, err = store.NewSQLiteStore(filepath.Join(*dataDir, "diff-mem.db"))
 	case "badger":
 		s, err = store.NewFileStore(*dataDir)
 	case "memory":
@@ -41,6 +47,35 @@ func main() {
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		log.Println("shutting down...")
+		cancel()
+	}()
+
+	httpSrv := &http.Server{
+		Addr:              *addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown error: %v", err)
+		}
+	}()
+
 	log.Printf("Diff-Mem engine (%s store) listening on %s", *storeKind, *addr)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal("server error: ", err)
+	}
 }

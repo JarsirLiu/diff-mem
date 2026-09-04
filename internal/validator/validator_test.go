@@ -10,17 +10,31 @@ import (
 
 func TestValidatePath_Valid(t *testing.T) {
 	cases := []string{
-		"/projects",
-		"/projects/alpha",
-		"/projects/alpha/backend-api",
-		"/tasks/修复登录模块",
-		"/a/b/c/d/e",
-		"/a_b",
-		"/a-b",
+		"/short-term/projects",
+		"/long-term/projects/alpha",
+		"/long-term/projects/alpha/backend-api",
+		"/short-term/tasks/修复登录模块",
+		"/short-term/a/b/c/d/e",
+		"/long-term/a_b",
+		"/long-term/a-b",
 	}
 	for _, p := range cases {
 		if err := validator.ValidatePath(p); err != "" {
 			t.Errorf("ValidatePath(%q) should be valid, got: %s", p, err)
+		}
+	}
+}
+
+func TestValidatePath_InvalidRoot(t *testing.T) {
+	cases := []string{
+		"/projects",       // not one of the two memory roots
+		"/projects/alpha", // not one of the two memory roots
+		"/short-term",     // root itself is a directory, not a node
+		"/long-term/",     // root alone with trailing slash
+	}
+	for _, p := range cases {
+		if err := validator.ValidatePath(p); err == "" {
+			t.Errorf("ValidatePath(%q) should be rejected (two-root rule)", p)
 		}
 	}
 }
@@ -54,14 +68,14 @@ func TestValidatePath_DoubleSlash(t *testing.T) {
 }
 
 func TestValidatePath_TooDeep(t *testing.T) {
-	err := validator.ValidatePath("/a/b/c/d/e/f")
+	err := validator.ValidatePath("/short-term/a/b/c/d/e/f")
 	if err == "" {
 		t.Fatal("path with 6 levels should be rejected")
 	}
 }
 
 func TestValidatePath_InvalidCharacter(t *testing.T) {
-	cases := []string{"/projects/alpha!", "/projects/alpha beta", "/projects/alpha#1"}
+	cases := []string{"/long-term/projects/alpha!", "/long-term/projects/alpha beta", "/long-term/projects/alpha#1"}
 	for _, p := range cases {
 		err := validator.ValidatePath(p)
 		if err == "" {
@@ -72,7 +86,7 @@ func TestValidatePath_InvalidCharacter(t *testing.T) {
 
 func TestValidatePath_SegmentTooLong(t *testing.T) {
 	long := strings.Repeat("a", 101)
-	err := validator.ValidatePath("/" + long)
+	err := validator.ValidatePath("/short-term/" + long)
 	if err == "" {
 		t.Fatal("segment >100 chars should be rejected")
 	}
@@ -80,11 +94,11 @@ func TestValidatePath_SegmentTooLong(t *testing.T) {
 
 func TestValidateCreate_AllValid(t *testing.T) {
 	opts := model.CreateOptions{
-		Path:      "/projects/alpha",
-		Title:     "Alpha",
-		Summary:   "A project",
-		Tags:      []string{"tag1"},
-		Reason:    "test reason",
+		Path:    "/long-term/projects/alpha",
+		Title:   "Alpha",
+		Summary: "A project",
+		Tags:    []string{"tag1"},
+		Reason:  "test reason",
 	}
 	if err := validator.ValidateCreate(opts); err != "" {
 		t.Fatalf("valid create should pass: %s", err)
@@ -92,7 +106,7 @@ func TestValidateCreate_AllValid(t *testing.T) {
 }
 
 func TestValidateCreate_EmptyTitle(t *testing.T) {
-	opts := model.CreateOptions{Path: "/a", Title: "", Summary: "s", Reason: "r"}
+	opts := model.CreateOptions{Path: "/long-term/a", Title: "", Summary: "s", Reason: "r"}
 	err := validator.ValidateCreate(opts)
 	if err == "" {
 		t.Fatal("empty title should be rejected")
@@ -100,7 +114,7 @@ func TestValidateCreate_EmptyTitle(t *testing.T) {
 }
 
 func TestValidateCreate_EmptySummary(t *testing.T) {
-	opts := model.CreateOptions{Path: "/a", Title: "t", Summary: "", Reason: "r"}
+	opts := model.CreateOptions{Path: "/long-term/a", Title: "t", Summary: "", Reason: "r"}
 	err := validator.ValidateCreate(opts)
 	if err == "" {
 		t.Fatal("empty summary should be rejected")
@@ -108,7 +122,7 @@ func TestValidateCreate_EmptySummary(t *testing.T) {
 }
 
 func TestValidateCreate_SummaryTooLong(t *testing.T) {
-	opts := model.CreateOptions{Path: "/a", Title: "t", Summary: strings.Repeat("a", 501), Reason: "r"}
+	opts := model.CreateOptions{Path: "/long-term/a", Title: "t", Summary: strings.Repeat("a", 501), Reason: "r"}
 	err := validator.ValidateCreate(opts)
 	if err == "" {
 		t.Fatal("summary >500 chars should be rejected")
@@ -120,7 +134,7 @@ func TestValidateCreate_TagsTooMany(t *testing.T) {
 	for i := range tags {
 		tags[i] = "tag"
 	}
-	opts := model.CreateOptions{Path: "/a", Title: "t", Summary: "s", Tags: tags, Reason: "r"}
+	opts := model.CreateOptions{Path: "/long-term/a", Title: "t", Summary: "s", Tags: tags, Reason: "r"}
 	err := validator.ValidateCreate(opts)
 	if err == "" {
 		t.Fatal(">20 tags should be rejected")
@@ -128,7 +142,7 @@ func TestValidateCreate_TagsTooMany(t *testing.T) {
 }
 
 func TestValidateCreate_EmptyReason(t *testing.T) {
-	opts := model.CreateOptions{Path: "/a", Title: "t", Summary: "s", Reason: ""}
+	opts := model.CreateOptions{Path: "/long-term/a", Title: "t", Summary: "s", Reason: ""}
 	err := validator.ValidateCreate(opts)
 	if err == "" {
 		t.Fatal("empty reason should be rejected")
@@ -136,35 +150,44 @@ func TestValidateCreate_EmptyReason(t *testing.T) {
 }
 
 func TestValidateAppend_AllValid(t *testing.T) {
-	opts := model.AppendOptions{Path: "/a", Event: "test event", Reason: "r"}
+	opts := model.AppendOptions{Path: "/long-term/a", Event: "test event", Reason: "r"}
 	if err := validator.ValidateAppend(opts); err != "" {
 		t.Fatalf("valid append should pass: %s", err)
 	}
 }
 
 func TestValidateAppend_EmptyEvent(t *testing.T) {
-	opts := model.AppendOptions{Path: "/a", Event: "", Reason: "r"}
+	opts := model.AppendOptions{Path: "/long-term/a", Event: "", Reason: "r"}
 	if err := validator.ValidateAppend(opts); err == "" {
 		t.Fatal("empty event should be rejected")
 	}
 }
 
 func TestValidateAppend_EventTooLong(t *testing.T) {
-	opts := model.AppendOptions{Path: "/a", Event: strings.Repeat("x", 2001), Reason: "r"}
+	opts := model.AppendOptions{Path: "/long-term/a", Event: strings.Repeat("x", 2001), Reason: "r"}
 	if err := validator.ValidateAppend(opts); err == "" {
 		t.Fatal("event >2000 chars should be rejected")
 	}
 }
 
 func TestValidateUpdateField_AllValid(t *testing.T) {
-	opts := model.UpdateFieldOptions{Path: "/a", Field: "status", Value: "active", Reason: "r"}
+	opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: "owner", Value: "active", Reason: "r"}
 	if err := validator.ValidateUpdateField(opts); err != "" {
 		t.Fatalf("valid update_field should pass: %s", err)
 	}
 }
 
+func TestValidateUpdateField_ProtectedFields(t *testing.T) {
+	for _, field := range []string{"status", "summary"} {
+		opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: field, Value: "v", Reason: "r"}
+		if err := validator.ValidateUpdateField(opts); err == "" {
+			t.Fatalf("protected field %q should be rejected", field)
+		}
+	}
+}
+
 func TestValidateUpdateField_InvalidField(t *testing.T) {
-	opts := model.UpdateFieldOptions{Path: "/a", Field: "Status!", Value: "v", Reason: "r"}
+	opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: "Status!", Value: "v", Reason: "r"}
 	err := validator.ValidateUpdateField(opts)
 	if err == "" {
 		t.Fatal("invalid field name should be rejected")
@@ -172,42 +195,42 @@ func TestValidateUpdateField_InvalidField(t *testing.T) {
 }
 
 func TestValidateUpdateField_ValueTooLong(t *testing.T) {
-	opts := model.UpdateFieldOptions{Path: "/a", Field: "f", Value: strings.Repeat("x", 5001), Reason: "r"}
+	opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: "f", Value: strings.Repeat("x", 5001), Reason: "r"}
 	if err := validator.ValidateUpdateField(opts); err == "" {
 		t.Fatal("value >5000 chars should be rejected")
 	}
 }
 
 func TestValidateUpdateSummary_AllValid(t *testing.T) {
-	opts := model.UpdateSummaryOptions{Path: "/a", NewSummary: "new summary", Reason: "r"}
+	opts := model.UpdateSummaryOptions{Path: "/long-term/a", NewSummary: "new summary", Reason: "r"}
 	if err := validator.ValidateUpdateSummary(opts); err != "" {
 		t.Fatalf("valid update_summary should pass: %s", err)
 	}
 }
 
 func TestValidateUpdateSummary_EmptyNew(t *testing.T) {
-	opts := model.UpdateSummaryOptions{Path: "/a", NewSummary: "", Reason: "r"}
+	opts := model.UpdateSummaryOptions{Path: "/long-term/a", NewSummary: "", Reason: "r"}
 	if err := validator.ValidateUpdateSummary(opts); err == "" {
 		t.Fatal("empty new_summary should be rejected")
 	}
 }
 
 func TestValidateUpdateSummary_TooLong(t *testing.T) {
-	opts := model.UpdateSummaryOptions{Path: "/a", NewSummary: strings.Repeat("x", 501), Reason: "r"}
+	opts := model.UpdateSummaryOptions{Path: "/long-term/a", NewSummary: strings.Repeat("x", 501), Reason: "r"}
 	if err := validator.ValidateUpdateSummary(opts); err == "" {
 		t.Fatal("new_summary >500 chars should be rejected")
 	}
 }
 
 func TestValidateArchive_Valid(t *testing.T) {
-	opts := model.ArchiveOptions{Path: "/a", Reason: "done"}
+	opts := model.ArchiveOptions{Path: "/long-term/a", Reason: "done"}
 	if err := validator.ValidateArchive(opts); err != "" {
 		t.Fatalf("valid archive should pass: %s", err)
 	}
 }
 
 func TestValidateArchive_EmptyReason(t *testing.T) {
-	opts := model.ArchiveOptions{Path: "/a", Reason: ""}
+	opts := model.ArchiveOptions{Path: "/long-term/a", Reason: ""}
 	if err := validator.ValidateArchive(opts); err == "" {
 		t.Fatal("empty reason should be rejected")
 	}
@@ -273,7 +296,7 @@ func TestValidateAppend_InvalidPath(t *testing.T) {
 }
 
 func TestValidateAppend_EmptyReason(t *testing.T) {
-	opts := model.AppendOptions{Path: "/a", Event: "e", Reason: ""}
+	opts := model.AppendOptions{Path: "/long-term/a", Event: "e", Reason: ""}
 	err := validator.ValidateAppend(opts)
 	if err == "" {
 		t.Fatal("empty reason in Append should be rejected")
@@ -289,7 +312,7 @@ func TestValidateUpdateField_InvalidPath(t *testing.T) {
 }
 
 func TestValidateUpdateField_EmptyField(t *testing.T) {
-	opts := model.UpdateFieldOptions{Path: "/a", Field: "", Value: "v", Reason: "r"}
+	opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: "", Value: "v", Reason: "r"}
 	err := validator.ValidateUpdateField(opts)
 	if err == "" {
 		t.Fatal("empty field should be rejected")
@@ -297,7 +320,7 @@ func TestValidateUpdateField_EmptyField(t *testing.T) {
 }
 
 func TestValidateUpdateField_EmptyReason(t *testing.T) {
-	opts := model.UpdateFieldOptions{Path: "/a", Field: "f", Value: "v", Reason: ""}
+	opts := model.UpdateFieldOptions{Path: "/long-term/a", Field: "f", Value: "v", Reason: ""}
 	if err := validator.ValidateUpdateField(opts); err == "" {
 		t.Fatal("empty reason in UpdateField should be rejected")
 	}
@@ -312,7 +335,7 @@ func TestValidateUpdateSummary_InvalidPath(t *testing.T) {
 }
 
 func TestValidateUpdateSummary_EmptyReason(t *testing.T) {
-	opts := model.UpdateSummaryOptions{Path: "/a", NewSummary: "s", Reason: ""}
+	opts := model.UpdateSummaryOptions{Path: "/long-term/a", NewSummary: "s", Reason: ""}
 	if err := validator.ValidateUpdateSummary(opts); err == "" {
 		t.Fatal("empty reason in UpdateSummary should be rejected")
 	}

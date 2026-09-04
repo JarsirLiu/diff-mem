@@ -125,7 +125,7 @@ MCP 暴露 7 个工具，与引擎 dispatch 名一一对应：
 
 | 工具 | 说明 |
 |------|------|
-| `diff_mem_create` | 创建新节点，引擎自动创建缺失父路径。Body 事件中可用 [[/path]] 链接其他记忆 |
+| `diff_mem_create` | 创建新节点。path 必须以 /short-term 或 /long-term 开头，中间目录无需预先创建。Body 事件中可用 [[/path]] 链接其他记忆 |
 | `diff_mem_append` | 向节点追加事件（仅记录新事实）。事件中可用 [[/path]] 链接其他记忆 |
 | `diff_mem_update` | 更新节点 Header。fields 传 {字段: 值} 批量改字段；summary 传 {old, new, reason} 刷新摘要。两者可同时提交 |
 | `diff_mem_lifecycle` | 节点生命周期状态转换。action: delete / archive / restore |

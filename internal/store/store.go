@@ -3,7 +3,6 @@ package store
 
 import (
 	"sync"
-	"time"
 
 	"github.com/diff-mem/diff-mem/internal/model"
 )
@@ -46,7 +45,8 @@ func (s *MemoryStore) GetNode(path string) (*model.Node, bool) {
 func (s *MemoryStore) PutNode(node *model.Node) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	node.Header.UpdatedAt = time.Now()
+	// UpdatedAt is stamped by the caller (engine), not the store,
+	// so read paths can persist LastAccessed without bumping it.
 	s.nodes[node.Header.Path] = node
 	return nil
 }
@@ -88,27 +88,8 @@ func (s *MemoryStore) BuildKeywordIndex() map[string][]string {
 		if node.Header.Status == model.StatusArchived {
 			continue
 		}
-		// Index path segments
-		// Index summary
-		// Index title
-		fields := []string{path, node.Header.Title, node.Header.Summary}
-		for _, f := range fields {
-			// Simple word-based indexing (split on common delimiters)
-			runes := []rune(f)
-			word := ""
-			for _, r := range runes {
-				if r == '/' || r == '-' || r == '_' || r == ' ' || r == '\n' || r == ',' || r == '，' {
-					if word != "" {
-						idx[word] = append(idx[word], path)
-						word = ""
-					}
-				} else {
-					word += string(r)
-				}
-			}
-			if word != "" {
-				idx[word] = append(idx[word], path)
-			}
+		for _, word := range tokenize(path, node.Header.Title, node.Header.Summary) {
+			idx[word] = append(idx[word], path)
 		}
 	}
 	return idx

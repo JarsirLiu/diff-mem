@@ -6,7 +6,7 @@ import "github.com/diff-mem/diff-mem/internal/model"
 func extractCreate(params map[string]interface{}) model.CreateOptions {
 	opts := model.CreateOptions{}
 	if v, ok := params["path"].(string); ok {
-		opts.Path = v
+		opts.Path = NormalizePath(v)
 	}
 	if v, ok := params["title"].(string); ok {
 		opts.Title = v
@@ -24,13 +24,20 @@ func extractCreate(params map[string]interface{}) model.CreateOptions {
 			}
 		}
 	}
+	if v, ok := params["initial_events"].([]interface{}); ok {
+		for _, ev := range v {
+			if s, ok := ev.(string); ok {
+				opts.InitialEvents = append(opts.InitialEvents, s)
+			}
+		}
+	}
 	return opts
 }
 
 func extractAppend(params map[string]interface{}) model.AppendOptions {
 	opts := model.AppendOptions{}
 	if v, ok := params["path"].(string); ok {
-		opts.Path = v
+		opts.Path = NormalizePath(v)
 	}
 	if v, ok := params["event"].(string); ok {
 		opts.Event = v
@@ -44,7 +51,7 @@ func extractAppend(params map[string]interface{}) model.AppendOptions {
 func extractUpdateField(params map[string]interface{}) model.UpdateFieldOptions {
 	opts := model.UpdateFieldOptions{}
 	if v, ok := params["path"].(string); ok {
-		opts.Path = v
+		opts.Path = NormalizePath(v)
 	}
 	if v, ok := params["field"].(string); ok {
 		opts.Field = v
@@ -61,7 +68,7 @@ func extractUpdateField(params map[string]interface{}) model.UpdateFieldOptions 
 func extractArchive(params map[string]interface{}) model.ArchiveOptions {
 	opts := model.ArchiveOptions{}
 	if v, ok := params["path"].(string); ok {
-		opts.Path = v
+		opts.Path = NormalizePath(v)
 	}
 	if v, ok := params["reason"].(string); ok {
 		opts.Reason = v
@@ -72,7 +79,7 @@ func extractArchive(params map[string]interface{}) model.ArchiveOptions {
 func extractUpdate(params map[string]interface{}) model.UpdateOptions {
 	opts := model.UpdateOptions{}
 	if v, ok := params["path"].(string); ok {
-		opts.Path = v
+		opts.Path = NormalizePath(v)
 	}
 	if v, ok := params["reason"].(string); ok {
 		opts.FieldReason = v
@@ -111,9 +118,6 @@ func extractSearch(params map[string]interface{}) model.SearchOptions {
 	}
 	if v, ok := params["limit"].(float64); ok {
 		opts.Limit = int(v)
-	}
-	if v, ok := params["include_archived"].(bool); ok {
-		opts.IncludeArchived = v
 	}
 	if v, ok := params["tags"].([]interface{}); ok {
 		for _, t := range v {

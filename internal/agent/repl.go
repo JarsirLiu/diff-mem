@@ -159,7 +159,12 @@ func cmdRecall(ctx context.Context, agent *Agent, w io.Writer, query string) err
 }
 
 func cmdStore(ctx context.Context, agent *Agent, w io.Writer, content string) error {
-	reason := fmt.Sprintf("用户输入: %s", content[:min(len(content), 50)])
+	runes := []rune(content)
+	preview := content
+	if len(runes) > 50 {
+		preview = string(runes[:50]) + "…"
+	}
+	reason := fmt.Sprintf("用户输入: %s", preview)
 	if err := agent.Store(ctx, content, reason); err != nil {
 		return fmt.Errorf("store failed: %v", err)
 	}

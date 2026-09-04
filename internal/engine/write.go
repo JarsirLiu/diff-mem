@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/diff-mem/diff-mem/internal/model"
 	"github.com/diff-mem/diff-mem/internal/validator"
+	"github.com/google/uuid"
 )
 
 func (e *Engine) Create(opts model.CreateOptions) *model.ToolResponse {
@@ -22,30 +22,24 @@ func (e *Engine) Create(opts model.CreateOptions) *model.ToolResponse {
 	if resp := e.validateContentLinks(opts.Path, opts.InitialEvents...); resp != nil {
 		return resp
 	}
-	for _, p := range collectParents(opts.Path) {
-		if !e.store.Exists(p) {
-			autoCreateParent(e, p)
-		}
-	}
 
 	node := &model.Node{
 		Header: model.Header{
-			Path:       opts.Path,
-			Title:      opts.Title,
-			Status:     model.StatusActive,
-			Tags:       opts.Tags,
-			Summary:    opts.Summary,
-			Fields:     make(map[string]string),
-			CreatedAt:  time.Now(),
-			UpdatedAt:  time.Now(),
-			EventCount: len(opts.InitialEvents),
+			Path:      opts.Path,
+			Title:     opts.Title,
+			Status:    model.StatusActive,
+			Tags:      opts.Tags,
+			Summary:   opts.Summary,
+			Fields:    make(map[string]string),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		},
 		Events: make([]model.Event, 0, len(opts.InitialEvents)+1),
 	}
 	node.Events = append(node.Events, model.Event{
 		ID: uuid.NewString(), Type: "create",
 		Content: opts.Title + ": " + opts.Summary,
-		Meta: map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
+		Meta:    map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
 	})
 	for _, ev := range opts.InitialEvents {
 		node.Events = append(node.Events, model.Event{
@@ -53,6 +47,7 @@ func (e *Engine) Create(opts model.CreateOptions) *model.ToolResponse {
 			Content: ev, Timestamp: time.Now(),
 		})
 	}
+	node.Header.EventCount = len(node.Events)
 	e.store.PutNode(node)
 	e.links.addLinks(opts.Path, nodeContentLinks(node))
 	return success(node.Header)
@@ -76,7 +71,7 @@ func (e *Engine) Append(opts model.AppendOptions) *model.ToolResponse {
 	event := model.Event{
 		ID: uuid.NewString(), Type: "user",
 		Content: opts.Event,
-		Meta: map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
+		Meta:    map[string]string{"reason": opts.Reason}, Timestamp: time.Now(),
 	}
 	node.Events = append(node.Events, event)
 	node.Header.EventCount = len(node.Events)
@@ -158,8 +153,8 @@ func (e *Engine) UpdateField(opts model.UpdateFieldOptions) *model.ToolResponse 
 	node.Header.UpdatedAt = time.Now()
 	node.Events = append(node.Events, model.Event{
 		ID: uuid.NewString(), Type: "field_change",
-		Content: "field " + opts.Field + " updated",
-		Meta: map[string]string{"field": opts.Field, "old": oldValue, "new": opts.Value, "reason": opts.Reason},
+		Content:   "field " + opts.Field + " updated",
+		Meta:      map[string]string{"field": opts.Field, "old": oldValue, "new": opts.Value, "reason": opts.Reason},
 		Timestamp: time.Now(),
 	})
 	node.Header.EventCount = len(node.Events)
