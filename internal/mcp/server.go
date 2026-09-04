@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"net/http"
 
-	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/diff-mem/diff-mem/internal/engine"
+	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Server struct {
 	srv    *stdmcp.Server
 	engine *engine.Engine
+	tools  map[string]*stdmcp.Tool
 }
 
 const serverInstructions = `
@@ -51,6 +52,7 @@ func New(e *engine.Engine) *Server {
 			Instructions: serverInstructions,
 		}),
 		engine: e,
+		tools:  make(map[string]*stdmcp.Tool),
 	}
 	s.registerTools()
 	return s
@@ -60,30 +62,37 @@ func (s *Server) registerTools() {
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_create",
 		Description: "在记忆树中创建新节点。path 由你决定，引擎自动创建缺失的父路径。Body 事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在。",
+		InputSchema: toolSchemas["create"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_append",
 		Description: "向节点追加事件。仅出现值得记录的新事实时调用。事件中可用 [[/path]] 链接其他记忆，链接目标必须已存在，否则写入被拒绝。",
+		InputSchema: toolSchemas["append"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_update",
 		Description: "更新节点 Header。fields 传 {字段: 值} 批量改字段；summary 传 {old, new, reason} 刷新摘要（实体消失需解释原因）。两者可同时提交。",
+		InputSchema: toolSchemas["update"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_lifecycle",
 		Description: "节点生命周期状态转换。action: delete（删除，不可逆，有活跃依赖时拒绝）/ archive（归档，冻结并移出默认搜索，可恢复）/ restore（恢复归档节点）。",
+		InputSchema: toolSchemas["lifecycle"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_list",
 		Description: "列出指定路径下的直接子节点。path 为空或 / 时列出根层级。",
+		InputSchema: toolSchemas["list"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_search",
 		Description: "搜索节点。支持 tags 精确匹配和 keywords 模糊匹配。",
+		InputSchema: toolSchemas["search"],
 	})
 	s.addTool(s.srv, &stdmcp.Tool{
 		Name:        "diff_mem_show",
 		Description: "查看节点。不传 window：返回 Header + 内容链接（links）与反向链接（backlinks），用于发现相关记忆。传 window（recent/last_10/last_50/last_100/all）：附带 Body 事件流，先看摘要再决定是否深入。",
+		InputSchema: toolSchemas["show"],
 	})
 }
 
@@ -105,10 +114,14 @@ func (s *Server) addTool(server *stdmcp.Server, t *stdmcp.Tool) {
 	toolName := t.Name
 	engineName := toolName[len("diff_mem_"):]
 
-	// InputSchema is required by the MCP SDK.
+	// Strictness: every tool MUST ship a complete input schema so the model
+	// sees the exact parameter contract. A tool without one is a programming
+	// error — fail fast at registration time instead of confusing the model.
 	if t.InputSchema == nil {
-		t.InputSchema = json.RawMessage(`{"type":"object"}`)
+		panic("tool " + toolName + " has no InputSchema")
 	}
+
+	s.tools[toolName] = t
 
 	server.AddTool(t, func(ctx context.Context, req *stdmcp.CallToolRequest) (*stdmcp.CallToolResult, error) {
 		var args map[string]interface{}

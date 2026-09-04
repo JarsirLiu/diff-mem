@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/diff-mem/diff-mem/internal/engine"
 	"github.com/diff-mem/diff-mem/internal/model"
 	"github.com/diff-mem/diff-mem/internal/store"
+	stdmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // --- helpers ---
@@ -383,3 +383,131 @@ func TestAllToolsMapToEngine(t *testing.T) {
 
 // Ensure model types are used (suppress unused import warnings)
 var _ model.Node
+
+// --- input schema strictness ---
+
+func TestAllToolsHaveStrictSchemas(t *testing.T) {
+	s := setupServer()
+	if len(s.tools) != 7 {
+		t.Fatalf("expected 7 registered tools, got %d", len(s.tools))
+	}
+	for name, tool := range s.tools {
+		if tool.InputSchema == nil {
+			t.Errorf("tool %s has no InputSchema", name)
+			continue
+		}
+		var schema map[string]interface{}
+		if err := json.Unmarshal(tool.InputSchema.(json.RawMessage), &schema); err != nil {
+			t.Errorf("tool %s: InputSchema is not valid JSON: %v", name, err)
+			continue
+		}
+		if schema["type"] != "object" {
+			t.Errorf("tool %s: schema type must be object", name)
+		}
+		props, ok := schema["properties"].(map[string]interface{})
+		if !ok || len(props) == 0 {
+			t.Errorf("tool %s: schema must declare properties", name)
+		}
+		// Every required field must reference a declared property.
+		req, _ := schema["required"].([]interface{})
+		for _, r := range req {
+			propName, _ := r.(string)
+			if _, ok := props[propName]; !ok {
+				t.Errorf("tool %s: required field %q not declared in properties", name, propName)
+			}
+		}
+	}
+}
+
+func TestToolSchemas_RequiredFields(t *testing.T) {
+	cases := map[string][]string{
+		"create":    {"path", "title", "summary", "reason"},
+		"append":    {"path", "event", "reason"},
+		"update":    {"path"},
+		"lifecycle": {"action", "path", "reason"},
+		"list":      {"path"},
+		"search":    nil,
+		"show":      {"path"},
+	}
+	for name, want := range cases {
+		raw, ok := toolSchemas[name]
+		if !ok {
+			t.Fatalf("missing schema for %s", name)
+		}
+		var schema struct {
+			Required []string               `json:"required"`
+			Props    map[string]interface{} `json:"properties"`
+		}
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got := map[string]bool{}
+		for _, r := range schema.Required {
+			got[r] = true
+		}
+		if len(schema.Required) != len(want) {
+			t.Fatalf("%s: required = %v, want %v", name, schema.Required, want)
+		}
+		for _, w := range want {
+			if !got[w] {
+				t.Fatalf("%s: required = %v, want %v", name, schema.Required, want)
+			}
+		}
+	}
+}
+
+func TestToolSchemas_EnumValues(t *testing.T) {
+	var lc struct {
+		Props map[string]struct {
+			Enum []string `json:"enum"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(toolSchemas["lifecycle"], &lc); err != nil {
+		t.Fatal(err)
+	}
+	action := lc.Props["action"].Enum
+	want := []string{"delete", "archive", "restore"}
+	if len(action) != len(want) {
+		t.Fatalf("lifecycle action enum = %v, want %v", action, want)
+	}
+	for i, w := range want {
+		if action[i] != w {
+			t.Fatalf("lifecycle action enum = %v, want %v", action, want)
+		}
+	}
+
+	var sh struct {
+		Props map[string]struct {
+			Enum []string `json:"enum"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(toolSchemas["show"], &sh); err != nil {
+		t.Fatal(err)
+	}
+	window := sh.Props["window"].Enum
+	wantWindows := []string{"recent", "last_10", "last_50", "last_100", "all"}
+	if len(window) != len(wantWindows) {
+		t.Fatalf("show window enum = %v, want %v", window, wantWindows)
+	}
+	for i, w := range wantWindows {
+		if window[i] != w {
+			t.Fatalf("show window enum = %v, want %v", window, wantWindows)
+		}
+	}
+}
+
+func TestToolSchemas_SearchLimitCapped(t *testing.T) {
+	var sc struct {
+		Props map[string]struct {
+			Maximum    int  `json:"maximum"`
+			Default    int  `json:"default"`
+			HasDefault bool `json:"-"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(toolSchemas["search"], &sc); err != nil {
+		t.Fatal(err)
+	}
+	if sc.Props["limit"].Maximum != 50 {
+		t.Fatalf("search limit maximum = %d, want 50", sc.Props["limit"].Maximum)
+	}
+}
